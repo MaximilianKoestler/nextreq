@@ -1,6 +1,7 @@
 use std::fmt;
 use std::iter::Peekable;
 use std::ops::Deref;
+use std::str;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Operator {
@@ -61,23 +62,23 @@ struct Lexer {
     tokens: Vec<Token>,
 }
 
-fn get_number<T: Iterator<Item = char>>(iter: &mut Peekable<T>) -> f64 {
-    let mut number = 0;
-
-    while let Some(Ok(digit)) = iter.peek().map(|c| c.to_string().parse::<u64>()) {
-        number = number * 10 + digit;
-        iter.next();
+fn get_number(it: &mut str::Chars) -> f64 {
+    let str_slice = it.as_str();
+    if let Some(numeric_end) = it.clone().position(|c| !(c.is_ascii_digit() || c == '.')) {
+        it.nth(numeric_end - 2);
+        str_slice[..numeric_end].parse().unwrap()
+    } else {
+        it.last();
+        str_slice.parse().unwrap()
     }
-
-    number as f64
 }
 
 impl Lexer {
     fn new(input: &str) -> Result<Lexer, String> {
         let mut tokens = Vec::new();
 
-        let mut it = input.chars().peekable();
-        while let Some(&c) = it.peek() {
+        let mut it = input.chars();
+        while let Some(c) = it.clone().next() {
             match c {
                 '0'..='9' => {
                     let value = get_number(&mut it);
@@ -155,14 +156,16 @@ mod tests {
     proptest! {
         #[test]
         fn tokenize_simple_expression(lhs: u32, rhs: u32, op in operator_strategy()) {
-            let lexer = Lexer::new(&format!("{} {} {}", lhs, op, rhs)).unwrap();
+            let lexer_no_spaces = Lexer::new(&format!("{}{}{}", lhs, op, rhs)).unwrap();
+            let lexer_with_spaces = Lexer::new(&format!("{} {} {}", lhs, op, rhs)).unwrap();
 
             let expected = vec![
                 Token::Number(lhs as f64),
                 Token::Operator(op),
                 Token::Number(rhs as f64),
             ];
-            prop_assert_eq!(&lexer[..], &expected[..]);
+            prop_assert_eq!(&lexer_no_spaces[..], &expected[..]);
+            prop_assert_eq!(&lexer_with_spaces[..], &expected[..]);
         }
     }
 
