@@ -64,13 +64,20 @@ struct Lexer {
 
 fn get_number(it: &mut str::Chars) -> f64 {
     let str_slice = it.as_str();
-    if let Some(numeric_end) = it.clone().position(|c| !(c.is_ascii_digit() || c == '.')) {
-        it.nth(numeric_end - 2);
-        str_slice[..numeric_end].parse().unwrap()
-    } else {
-        it.last();
-        str_slice.parse().unwrap()
+
+    let numeric_chars = it
+        .clone()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .count();
+
+    // upon returning, `it` must point to the last numeric char
+    // `it + numeric_chars` at the first non-numeric or at the end of the string
+    // `it + numeric_chars - 1` points at the last numeric char (where we need to go)
+    if numeric_chars > 1 {
+        it.nth(numeric_chars - 1 - 1); // -1 because nth(x) advances x + 1 times
     }
+
+    str_slice[..numeric_chars].parse().unwrap()
 }
 
 impl Lexer {
@@ -175,6 +182,26 @@ mod tests {
         let expected = vec![
             Token::Bracket(Bracket::RoundOpen),
             Token::Bracket(Bracket::RoundClose),
+        ];
+        assert_eq!(&lexer[..], &expected[..]);
+    }
+
+    #[test]
+    fn tokenize_complex_expression() {
+        let lexer = Lexer::new("0+ (1 + 10* -200)/3").unwrap();
+        let expected = vec![
+            Token::Number(0.0),
+            Token::Operator(Operator::Add),
+            Token::Bracket(Bracket::RoundOpen),
+            Token::Number(1.0),
+            Token::Operator(Operator::Add),
+            Token::Number(10.0),
+            Token::Operator(Operator::Mul),
+            Token::Operator(Operator::Sub),
+            Token::Number(200.0),
+            Token::Bracket(Bracket::RoundClose),
+            Token::Operator(Operator::Div),
+            Token::Number(3.0),
         ];
         assert_eq!(&lexer[..], &expected[..]);
     }
