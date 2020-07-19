@@ -71,7 +71,7 @@ fn get_number(it: &mut str::Chars) -> f64 {
         .count();
 
     // upon returning, `it` must point to the last numeric char
-    // `it + numeric_chars` at the first non-numeric or at the end of the string
+    // `it + numeric_chars` points at the first non-numeric or at the end of the string
     // `it + numeric_chars - 1` points at the last numeric char (where we need to go)
     if numeric_chars > 1 {
         it.nth(numeric_chars - 1 - 1); // -1 because nth(x) advances x + 1 times
@@ -152,25 +152,35 @@ mod tests {
 
     proptest! {
         #[test]
-        fn tokenize_value(value: u32) {
+        fn tokenize_value(value: f64) {
             let lexer = Lexer::new(&value.to_string()).unwrap();
 
-            let expected = vec![Token::Number(value as f64)];
+            let mut expected = vec![];
+            if value < 0.0 {
+                expected.push(Token::Operator(Operator::Sub))
+            }
+            expected.push(Token::Number(value.abs()));
             prop_assert_eq!(&lexer[..], &expected[..]);
         }
     }
 
     proptest! {
         #[test]
-        fn tokenize_simple_expression(lhs: u32, rhs: u32, op in operator_strategy()) {
+        fn tokenize_simple_expression(lhs: f64, rhs: f64, op in operator_strategy()) {
             let lexer_no_spaces = Lexer::new(&format!("{}{}{}", lhs, op, rhs)).unwrap();
             let lexer_with_spaces = Lexer::new(&format!("{} {} {}", lhs, op, rhs)).unwrap();
 
-            let expected = vec![
-                Token::Number(lhs as f64),
-                Token::Operator(op),
-                Token::Number(rhs as f64),
-            ];
+            let mut expected = vec![];
+            if lhs < 0.0 {
+                expected.push(Token::Operator(Operator::Sub))
+            }
+            expected.push(Token::Number(lhs.abs()));
+            expected.push(Token::Operator(op));
+            if rhs < 0.0 {
+                expected.push(Token::Operator(Operator::Sub))
+            }
+            expected.push(Token::Number(rhs.abs()));
+
             prop_assert_eq!(&lexer_no_spaces[..], &expected[..]);
             prop_assert_eq!(&lexer_with_spaces[..], &expected[..]);
         }
@@ -188,12 +198,12 @@ mod tests {
 
     #[test]
     fn tokenize_complex_expression() {
-        let lexer = Lexer::new("0+ (1 + 10* -200)/3").unwrap();
+        let lexer = Lexer::new("0+ (1.5 + 10* -200)/3").unwrap();
         let expected = vec![
             Token::Number(0.0),
             Token::Operator(Operator::Add),
             Token::Bracket(Bracket::RoundOpen),
-            Token::Number(1.0),
+            Token::Number(1.5),
             Token::Operator(Operator::Add),
             Token::Number(10.0),
             Token::Operator(Operator::Mul),
