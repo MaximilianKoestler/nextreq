@@ -13,12 +13,28 @@ enum Operator {
 impl fmt::Display for Operator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let op = match self {
-            Operator::Add => "+",
-            Operator::Sub => "-",
-            Operator::Mul => "*",
-            Operator::Div => "/",
+            Self::Add => "+",
+            Self::Sub => "-",
+            Self::Mul => "*",
+            Self::Div => "/",
         };
         write!(f, "{}", op)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Bracket {
+    RoundOpen,
+    RoundClose,
+}
+
+impl fmt::Display for Bracket {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let bracket = match self {
+            Self::RoundOpen => "(",
+            Self::RoundClose => ")",
+        };
+        write!(f, "{}", bracket)
     }
 }
 
@@ -27,7 +43,18 @@ enum Token {
     Number(f64),
     Identifier(String),
     Operator(Operator),
-    Parentheses(char),
+    Bracket(Bracket),
+}
+
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Number(n) => write!(f, "{}", n),
+            Self::Identifier(s) => write!(f, "{}", s),
+            Self::Operator(o) => write!(f, "{}", o),
+            Self::Bracket(b) => write!(f, "{}", b),
+        }
+    }
 }
 
 struct Lexer {
@@ -68,6 +95,12 @@ impl Lexer {
                 '/' => {
                     tokens.push(Token::Operator(Operator::Div));
                 }
+                '(' => {
+                    tokens.push(Token::Bracket(Bracket::RoundOpen));
+                }
+                ')' => {
+                    tokens.push(Token::Bracket(Bracket::RoundClose));
+                }
                 ' ' => {}
                 _ => {
                     return Err(format!("Unexpected symbol: {}", c));
@@ -93,12 +126,6 @@ mod tests {
     use super::*;
     use proptest::prelude::*;
 
-    #[test]
-    fn tokenize_invalid() {
-        let lexer = Lexer::new("$");
-        assert!(lexer.is_err());
-    }
-
     fn operator_strategy() -> BoxedStrategy<Operator> {
         prop_oneof![
             Just(Operator::Add),
@@ -107,6 +134,12 @@ mod tests {
             Just(Operator::Div),
         ]
         .boxed()
+    }
+
+    #[test]
+    fn tokenize_invalid() {
+        let lexer = Lexer::new("$");
+        assert!(lexer.is_err());
     }
 
     proptest! {
@@ -131,5 +164,15 @@ mod tests {
             ];
             prop_assert_eq!(&lexer[..], &expected[..]);
         }
+    }
+
+    #[test]
+    fn tokenize_bracket_pair() {
+        let lexer = Lexer::new("()").unwrap();
+        let expected = vec![
+            Token::Bracket(Bracket::RoundOpen),
+            Token::Bracket(Bracket::RoundClose),
+        ];
+        assert_eq!(&lexer[..], &expected[..]);
     }
 }
