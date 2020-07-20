@@ -98,16 +98,6 @@ impl<'a> PrefixTakable<'a> for str::Chars<'a> {
     }
 }
 
-fn get_number(it: &mut str::Chars) -> Result<f64, FormulaError> {
-    it.take_prefix(|c| c.is_ascii_digit() || *c == '.')
-        .parse()
-        .map_err(|err: std::num::ParseFloatError| FormulaError::LexerError(err.to_string()))
-}
-
-fn get_identifier<'a>(it: &'a mut str::Chars) -> &'a str {
-    it.take_prefix(|c| c.is_alphanumeric())
-}
-
 impl Lexer {
     pub fn new(input: &str) -> Result<Lexer, FormulaError> {
         let mut tokens = Vec::new();
@@ -116,11 +106,11 @@ impl Lexer {
         while let Some(c) = it.clone().next() {
             match c {
                 '0'..='9' => {
-                    let value = get_number(&mut it)?;
+                    let value = Self::get_number(&mut it)?;
                     tokens.push(Token::Number(value));
                 }
                 x if x.is_alphabetic() => {
-                    let value = get_identifier(&mut it);
+                    let value = Self::get_identifier(&mut it);
                     tokens.push(Token::Identifier(value.to_owned()));
                 }
                 '+' => {
@@ -153,6 +143,16 @@ impl Lexer {
         }
 
         Ok(Lexer { tokens })
+    }
+
+    fn get_number(it: &mut str::Chars) -> Result<f64, FormulaError> {
+        it.take_prefix(|c| c.is_ascii_digit() || *c == '.')
+            .parse()
+            .map_err(|err: std::num::ParseFloatError| FormulaError::LexerError(err.to_string()))
+    }
+
+    fn get_identifier<'a>(it: &'a mut str::Chars) -> &'a str {
+        it.take_prefix(|c| c.is_alphanumeric())
     }
 }
 
