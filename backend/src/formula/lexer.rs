@@ -171,7 +171,7 @@ mod tests {
     use proptest::prelude::*;
 
     fn identifier_strategy() -> BoxedStrategy<String> {
-        proptest::string::string_regex(r"\p{Alphabetic}[\p{Alphabetic}\d]*")
+        proptest::string::string_regex(r"\p{Alphabetic}[\p{Alphabetic}\d]{0,32}")
             .unwrap()
             .boxed()
     }
@@ -201,13 +201,15 @@ mod tests {
     }
 
     fn whitespace_strategy() -> BoxedStrategy<String> {
-        proptest::string::string_regex(r"\s*").unwrap().boxed()
+        proptest::string::string_regex(r"\s{0,16}").unwrap().boxed()
     }
 
     fn whitespace_for_token_strategy(token: &Token) -> BoxedStrategy<String> {
+        // for the random testing, numbers and identifiers must be followed by a space to
+        // distinguish them from another number/identifier which could potentially follow directly
         proptest::string::string_regex(match token {
-            Token::Number(_) | Token::Identifier(_) => r"\s+",
-            _ => r"\s*",
+            Token::Number(_) | Token::Identifier(_) => r"\s{1,16}",
+            _ => r"\s{0,16}",
         })
         .unwrap()
         .boxed()
@@ -322,7 +324,7 @@ mod tests {
                 .flat_map(|(token, space)| once(token.to_string()).chain(once(space.clone())))
                 .join("");
 
-            let tokens: Vec<_> = input
+            let expected: Vec<_> = input
                 .into_iter()
                 .map(|(token, _)| token)
                 .flat_map(|token| match token {
@@ -334,7 +336,7 @@ mod tests {
                 .collect();
 
             let lexer = Lexer::new(&token_str).unwrap();
-            assert_eq!(&lexer[..], &tokens[..]);
+            assert_eq!(&lexer[..], &expected[..]);
         }
     }
 }
