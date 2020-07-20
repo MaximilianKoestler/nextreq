@@ -248,11 +248,10 @@ mod tests {
         fn tokenize_value(value: f64, spaces in whitespace_strategy()) {
             let lexer = Lexer::new(&format!("{}{}", value, spaces)).unwrap();
 
-            let mut expected = vec![];
+            let mut expected = vec![Token::Number(value.abs())];
             if value < 0.0 {
-                expected.push(Token::Operator(Operator::Sub))
+                expected.insert(0, Token::Operator(Operator::Sub))
             }
-            expected.push(Token::Number(value.abs()));
             prop_assert_eq!(&lexer[..], &expected[..]);
         }
     }
@@ -268,23 +267,26 @@ mod tests {
 
     proptest! {
         #[test]
-        fn tokenize_simple_expression(lhs: f64, rhs: f64, op: Operator) {
-            let lexer_no_spaces = Lexer::new(&format!("{}{}{}", lhs, op, rhs)).unwrap();
-            let lexer_with_spaces = Lexer::new(&format!("{} {} {}", lhs, op, rhs)).unwrap();
-
-            let mut expected = vec![];
-            if lhs < 0.0 {
-                expected.push(Token::Operator(Operator::Sub))
-            }
-            expected.push(Token::Number(lhs.abs()));
-            expected.push(Token::Operator(op));
+        fn tokenize_simple_expression(
+            lhs: f64,
+            rhs: f64,
+            op: Operator,
+            spaces in whitespace_strategy(),
+        ) {
+            let lexer = Lexer::new(&format!("{}{sp}{}{sp}{}", lhs, op, rhs, sp = spaces)).unwrap();
+            let mut expected = vec![
+                Token::Number(lhs.abs()),
+                Token::Operator(op),
+                Token::Number(rhs.abs()),
+            ];
             if rhs < 0.0 {
-                expected.push(Token::Operator(Operator::Sub))
+                expected.insert(2, Token::Operator(Operator::Sub))
             }
-            expected.push(Token::Number(rhs.abs()));
+            if lhs < 0.0 {
+                expected.insert(0, Token::Operator(Operator::Sub))
+            }
 
-            prop_assert_eq!(&lexer_no_spaces[..], &expected[..]);
-            prop_assert_eq!(&lexer_with_spaces[..], &expected[..]);
+            prop_assert_eq!(&lexer[..], &expected[..]);
         }
     }
 
