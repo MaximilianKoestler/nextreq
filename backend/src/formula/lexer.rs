@@ -6,19 +6,19 @@ use super::error::FormulaError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Operator {
-    Add,
-    Sub,
-    Mul,
-    Div,
+    Plus,
+    Minus,
+    Star,
+    Slash,
 }
 
 impl fmt::Display for Operator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let op = match self {
-            Self::Add => "+",
-            Self::Sub => "-",
-            Self::Mul => "*",
-            Self::Div => "/",
+            Self::Plus => "+",
+            Self::Minus => "-",
+            Self::Star => "*",
+            Self::Slash => "/",
         };
         write!(f, "{}", op)
     }
@@ -114,16 +114,16 @@ impl Lexer {
                     tokens.push(Token::Identifier(value.to_owned()));
                 }
                 '+' => {
-                    tokens.push(Token::Operator(Operator::Add));
+                    tokens.push(Token::Operator(Operator::Plus));
                 }
                 '-' => {
-                    tokens.push(Token::Operator(Operator::Sub));
+                    tokens.push(Token::Operator(Operator::Minus));
                 }
                 '*' => {
-                    tokens.push(Token::Operator(Operator::Mul));
+                    tokens.push(Token::Operator(Operator::Star));
                 }
                 '/' => {
-                    tokens.push(Token::Operator(Operator::Div));
+                    tokens.push(Token::Operator(Operator::Slash));
                 }
                 '(' => {
                     tokens.push(Token::Bracket(Bracket::RoundOpen));
@@ -183,10 +183,10 @@ mod tests {
 
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             prop_oneof![
-                Just(Self::Add),
-                Just(Self::Sub),
-                Just(Self::Mul),
-                Just(Self::Div),
+                Just(Self::Plus),
+                Just(Self::Minus),
+                Just(Self::Star),
+                Just(Self::Slash),
             ]
             .boxed()
         }
@@ -254,7 +254,7 @@ mod tests {
 
             let mut expected = vec![Token::Number(value.abs())];
             if value < 0.0 {
-                expected.insert(0, Token::Operator(Operator::Sub))
+                expected.insert(0, Token::Operator(Operator::Minus))
             }
             prop_assert_eq!(&lexer[..], &expected[..]);
         }
@@ -284,10 +284,10 @@ mod tests {
                 Token::Number(rhs.abs()),
             ];
             if rhs < 0.0 {
-                expected.insert(2, Token::Operator(Operator::Sub))
+                expected.insert(2, Token::Operator(Operator::Minus))
             }
             if lhs < 0.0 {
-                expected.insert(0, Token::Operator(Operator::Sub))
+                expected.insert(0, Token::Operator(Operator::Minus))
             }
 
             prop_assert_eq!(&lexer[..], &expected[..]);
@@ -309,19 +309,19 @@ mod tests {
         let lexer = Lexer::new("0+ fn3(1.5 + 10* -200)/3/你好").unwrap();
         let expected = vec![
             Token::Number(0.0),
-            Token::Operator(Operator::Add),
+            Token::Operator(Operator::Plus),
             Token::Identifier("fn3".to_owned()),
             Token::Bracket(Bracket::RoundOpen),
             Token::Number(1.5),
-            Token::Operator(Operator::Add),
+            Token::Operator(Operator::Plus),
             Token::Number(10.0),
-            Token::Operator(Operator::Mul),
-            Token::Operator(Operator::Sub),
+            Token::Operator(Operator::Star),
+            Token::Operator(Operator::Minus),
             Token::Number(200.0),
             Token::Bracket(Bracket::RoundClose),
-            Token::Operator(Operator::Div),
+            Token::Operator(Operator::Slash),
             Token::Number(3.0),
-            Token::Operator(Operator::Div),
+            Token::Operator(Operator::Slash),
             Token::Identifier("你好".to_owned()),
         ];
         assert_eq!(&lexer[..], &expected[..]);
@@ -345,7 +345,7 @@ mod tests {
                 .map(|(token, _)| token)
                 .flat_map(|token| match token {
                     Token::Number(value) if value < 0.0 => {
-                        vec![Token::Operator(Operator::Sub), Token::Number(value.abs())]
+                        vec![Token::Operator(Operator::Minus), Token::Number(value.abs())]
                     }
                     _ => vec![token],
                 })

@@ -48,10 +48,10 @@ impl fmt::Display for Operator {
 impl From<&LexerOperator> for Operator {
     fn from(op: &LexerOperator) -> Self {
         match op {
-            LexerOperator::Add => Self::Add,
-            LexerOperator::Sub => Self::Sub,
-            LexerOperator::Mul => Self::Mul,
-            LexerOperator::Div => Self::Div,
+            LexerOperator::Plus => Self::Add,
+            LexerOperator::Minus => Self::Sub,
+            LexerOperator::Star => Self::Mul,
+            LexerOperator::Slash => Self::Div,
         }
     }
 }
@@ -100,8 +100,8 @@ impl Parser {
                 result.extend(Self::expression(it, bp)?);
 
                 let op = match op {
-                    LexerOperator::Add => Operator::Pos,
-                    LexerOperator::Sub => Operator::Neg,
+                    LexerOperator::Plus => Operator::Pos,
+                    LexerOperator::Minus => Operator::Neg,
                     _ => return Err(ParserError(format!("unsupported unary operator: {}", op))),
                 };
                 result.push(ParseItem::Operator(op));
@@ -143,15 +143,15 @@ impl Parser {
 
     fn prefix_binding_power(op: &LexerOperator) -> Result<u8, FormulaError> {
         match op {
-            LexerOperator::Add | LexerOperator::Sub => Ok(5),
+            LexerOperator::Plus | LexerOperator::Minus => Ok(5),
             _ => return Err(ParserError(format!("unsupported unary operator: {}", op))),
         }
     }
 
     fn infix_binding_power(op: &LexerOperator) -> (u8, u8) {
         match op {
-            LexerOperator::Add | LexerOperator::Sub => (1, 2),
-            LexerOperator::Mul | LexerOperator::Div => (3, 4),
+            LexerOperator::Plus | LexerOperator::Minus => (1, 2),
+            LexerOperator::Star | LexerOperator::Slash => (3, 4),
         }
     }
 }
@@ -193,8 +193,8 @@ mod tests {
                     .iter()
                     .map(TokenTree::postfix)
                     .chain(once(match operator {
-                        LexerOperator::Add if operands.len() == 1 => "⊕".to_owned(),
-                        LexerOperator::Sub if operands.len() == 1 => "⊖".to_owned(),
+                        LexerOperator::Plus if operands.len() == 1 => "⊕".to_owned(),
+                        LexerOperator::Minus if operands.len() == 1 => "⊖".to_owned(),
                         _ => operator.to_string(),
                     }))
                     .join(" "),
@@ -229,7 +229,7 @@ mod tests {
     }
 
     fn unary_operator() -> BoxedStrategy<LexerOperator> {
-        prop_oneof![Just(LexerOperator::Add), Just(LexerOperator::Sub),].boxed()
+        prop_oneof![Just(LexerOperator::Plus), Just(LexerOperator::Minus),].boxed()
     }
 
     prop_compose! {
@@ -272,7 +272,7 @@ mod tests {
 
     #[test]
     fn tokenize_invalid() {
-        assert!(Parser::new(&vec![Token::Operator(LexerOperator::Add)]).is_err());
+        assert!(Parser::new(&vec![Token::Operator(LexerOperator::Plus)]).is_err());
     }
 
     proptest! {
@@ -315,9 +315,9 @@ mod tests {
     fn parse_complex_expressions() {
         let parser = Parser::new(&vec![
             Token::Number(1.0),
-            Token::Operator(LexerOperator::Add),
+            Token::Operator(LexerOperator::Plus),
             Token::Number(2.0),
-            Token::Operator(LexerOperator::Sub),
+            Token::Operator(LexerOperator::Minus),
             Token::Number(3.0),
         ])
         .unwrap();
@@ -325,9 +325,9 @@ mod tests {
 
         let parser = Parser::new(&vec![
             Token::Number(1.0),
-            Token::Operator(LexerOperator::Add),
+            Token::Operator(LexerOperator::Plus),
             Token::Number(2.0),
-            Token::Operator(LexerOperator::Mul),
+            Token::Operator(LexerOperator::Star),
             Token::Number(3.0),
         ])
         .unwrap();
@@ -335,9 +335,9 @@ mod tests {
 
         let parser = Parser::new(&vec![
             Token::Number(1.0),
-            Token::Operator(LexerOperator::Mul),
+            Token::Operator(LexerOperator::Star),
             Token::Number(2.0),
-            Token::Operator(LexerOperator::Sub),
+            Token::Operator(LexerOperator::Minus),
             Token::Number(3.0),
         ])
         .unwrap();
