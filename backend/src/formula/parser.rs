@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::Deref;
 
-use super::error::FormulaError;
+use super::error::{FormulaError, FormulaError::ParserError};
 use super::lexer::{Operator as LexerOperator, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -93,17 +93,8 @@ impl Parser {
 
         let lhs = match it.next() {
             Some(Token::Number(value)) => ParseItem::Value(Value::Number(*value)),
-            Some(token) => {
-                return Err(FormulaError::ParserError(format!(
-                    "unsupported token: {}",
-                    token
-                )))
-            }
-            None => {
-                return Err(FormulaError::ParserError(
-                    "unexpected end of expression".to_owned(),
-                ))
-            }
+            Some(token) => return Err(ParserError(format!("unsupported token: {}", token))),
+            None => return Err(ParserError("unexpected end of expression".to_owned())),
         };
         result.push(lhs);
 
