@@ -107,6 +107,14 @@ impl Parser {
                 result.extend(rhs);
                 result.push(ParseItem::Operator(op));
             }
+            Some(Token::Bracket(LexerBracket::RoundOpen)) => {
+                let lhs = Self::expression(it, 0)?;
+                assert_eq!(
+                    it.next().unwrap(),
+                    &Token::Bracket(LexerBracket::RoundClose)
+                );
+                result.extend(lhs);
+            }
             Some(token) => return Err(ParserError(format!("unsupported token: {}", token))),
             None => return Err(ParserError("unexpected end of expression".to_owned())),
         };
@@ -114,6 +122,7 @@ impl Parser {
         loop {
             let op = match it.peek() {
                 None => break,
+                Some(Token::Bracket(LexerBracket::RoundClose)) => break,
                 Some(Token::Operator(op)) => op,
                 t => panic!("bad token: {:?}", t),
             };
@@ -197,20 +206,12 @@ mod tests {
                         .chain(once(Token::Operator(operator.clone())))
                         .chain(operands[0..1].iter().flat_map(TokenTree::infix))
                         .chain(once(Token::Bracket(LexerBracket::RoundClose)))
-                        .filter(|p| match p {
-                            Token::Bracket(_) => false,
-                            _ => true,
-                        })
                         .collect(),
                     2 => once(Token::Bracket(LexerBracket::RoundOpen))
                         .chain(operands[0..1].iter().flat_map(TokenTree::infix))
                         .chain(once(Token::Operator(operator.clone())))
                         .chain(operands[1..].iter().flat_map(TokenTree::infix))
                         .chain(once(Token::Bracket(LexerBracket::RoundClose)))
-                        .filter(|p| match p {
-                            Token::Bracket(_) => false,
-                            _ => true,
-                        })
                         .collect(),
                     i => panic!("unsupported number of operands: {}", i),
                 },
@@ -274,6 +275,17 @@ mod tests {
         }
     }
 
+    #[test]
+    fn parse_bracket_value() {
+        let tokens = vec![
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.0),
+            Token::Bracket(LexerBracket::RoundClose),
+        ];
+        let parser = Parser::new(&tokens).unwrap();
+        assert_eq!(parser.postfix(), "1".to_owned());
+    }
+
     proptest! {
         #[test]
         fn parse_simple_expression(lhs: f64, rhs: f64, op: LexerOperator) {
@@ -327,7 +339,7 @@ mod tests {
         #[test]
         fn arbitrary_expression(token_tree: TokenTree) {
             let parser = Parser::new(&token_tree.infix()).unwrap();
-            // assert_eq!(parser.postfix(), token_tree.postfix());
+            assert_eq!(parser.postfix(), token_tree.postfix());
         }
     }
 }
