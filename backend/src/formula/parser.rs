@@ -45,17 +45,6 @@ impl fmt::Display for Operator {
     }
 }
 
-impl From<&LexerOperator> for Operator {
-    fn from(op: &LexerOperator) -> Self {
-        match op {
-            LexerOperator::Plus => Self::Add,
-            LexerOperator::Minus => Self::Sub,
-            LexerOperator::Star => Self::Mul,
-            LexerOperator::Slash => Self::Div,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseItem {
     Value(Value),
@@ -68,12 +57,6 @@ impl fmt::Display for ParseItem {
             Self::Value(v) => write!(f, "{}", v),
             Self::Operator(o) => write!(f, "{}", o),
         }
-    }
-}
-
-impl From<&LexerOperator> for ParseItem {
-    fn from(op: &LexerOperator) -> Self {
-        Self::Operator(op.into())
     }
 }
 
@@ -96,14 +79,14 @@ impl Parser {
         match it.next() {
             Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
             Some(Token::Operator(op)) => {
-                let bp = Self::prefix_binding_power(op)?;
-                result.extend(Self::expression(it, bp)?);
-
                 let op = match op {
                     LexerOperator::Plus => Operator::Pos,
                     LexerOperator::Minus => Operator::Neg,
                     _ => return Err(ParserError(format!("unsupported unary operator: {}", op))),
                 };
+                let bp = Self::prefix_binding_power(&op);
+
+                result.extend(Self::expression(it, bp)?);
                 result.push(ParseItem::Operator(op));
             }
             Some(Token::Bracket(LexerBracket::RoundOpen)) => {
@@ -121,15 +104,20 @@ impl Parser {
             match it.peek() {
                 Some(Token::Bracket(LexerBracket::RoundClose)) => break,
                 Some(Token::Operator(op)) => {
-                    let (l_bp, r_bp) = Self::infix_binding_power(op);
-
+                    let op = match op {
+                        LexerOperator::Plus => Operator::Add,
+                        LexerOperator::Minus => Operator::Sub,
+                        LexerOperator::Star => Operator::Mul,
+                        LexerOperator::Slash => Operator::Div,
+                    };
+                    let (l_bp, r_bp) = Self::infix_binding_power(&op);
                     if l_bp < min_bp {
                         break;
                     }
 
                     it.next();
                     result.extend(Self::expression(it, r_bp)?);
-                    result.push(op.into());
+                    result.push(ParseItem::Operator(op));
                 }
                 Some(token) => {
                     return Err(ParserError(format!("unsupported start token: {}", token)))
@@ -141,17 +129,18 @@ impl Parser {
         Ok(result)
     }
 
-    fn prefix_binding_power(op: &LexerOperator) -> Result<u8, FormulaError> {
+    fn prefix_binding_power(op: &Operator) -> u8 {
         match op {
-            LexerOperator::Plus | LexerOperator::Minus => Ok(5),
-            _ => return Err(ParserError(format!("unsupported unary operator: {}", op))),
+            Operator::Pos | Operator::Neg => 5,
+            _ => panic!("unsupported unary operator: {}", op),
         }
     }
 
-    fn infix_binding_power(op: &LexerOperator) -> (u8, u8) {
+    fn infix_binding_power(op: &Operator) -> (u8, u8) {
         match op {
-            LexerOperator::Plus | LexerOperator::Minus => (1, 2),
-            LexerOperator::Star | LexerOperator::Slash => (3, 4),
+            Operator::Add | Operator::Sub => (1, 2),
+            Operator::Mul | Operator::Div => (3, 4),
+            _ => panic!("unsupported binary operator: {}", op),
         }
     }
 }
@@ -260,7 +249,7 @@ mod tests {
                 // r"[[:lower:]]{1}".prop_map(TokenTree::Variable),
             ];
 
-            leaf.prop_recursive(8, 64, 2, |inner| {
+            leaf.prop_recursive(32, 1024, 2, |inner| {
                 prop_oneof![
                     unary_expression(inner.clone()),
                     binary_expression(inner.clone()),
