@@ -78,6 +78,9 @@ impl Parser {
 
         match it.next() {
             Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
+            Some(Token::Identifier(name)) => {
+                result.push(ParseItem::Value(Value::Variable(name.clone())))
+            }
             Some(Token::Operator(op)) => {
                 let op = match op {
                     LexerOperator::Plus => Operator::Pos,
@@ -246,7 +249,7 @@ mod tests {
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             let leaf = prop_oneof![
                 (0..100u32).prop_map(|v| TokenTree::Number(v as f64)),
-                // r"[[:lower:]]{1}".prop_map(TokenTree::Variable),
+                r"[[:lower:]]{1}".prop_map(TokenTree::Variable),
             ];
 
             leaf.prop_recursive(32, 1024, 2, |inner| {
@@ -270,6 +273,15 @@ mod tests {
             let tokens = vec![Token::Number(value)];
             let parser = Parser::new(&tokens).unwrap();
             prop_assert_eq!(parser.postfix(), value.to_string());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn parse_variable(name: String) {
+            let tokens = vec![Token::Identifier(name.clone())];
+            let parser = Parser::new(&tokens).unwrap();
+            prop_assert_eq!(parser.postfix(), name);
         }
     }
 
