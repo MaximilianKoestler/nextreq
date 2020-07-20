@@ -343,6 +343,18 @@ mod tests {
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 * 3 -"));
+
+        let parser = Parser::new(&vec![
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.0),
+            Token::Operator(LexerOperator::Plus),
+            Token::Number(2.0),
+            Token::Bracket(LexerBracket::RoundClose),
+            Token::Operator(LexerOperator::Star),
+            Token::Number(3.0),
+        ])
+        .unwrap();
+        assert_eq!(parser.postfix(), format!("1 2 + 3 *"));
     }
 
     proptest! {
