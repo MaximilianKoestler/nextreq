@@ -176,28 +176,40 @@ mod tests {
             .boxed()
     }
 
-    fn operator_strategy() -> BoxedStrategy<Operator> {
-        prop_oneof![
-            Just(Operator::Add),
-            Just(Operator::Sub),
-            Just(Operator::Mul),
-            Just(Operator::Div),
-        ]
-        .boxed()
+    impl Arbitrary for Operator {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                Just(Self::Add),
+                Just(Self::Sub),
+                Just(Self::Mul),
+                Just(Self::Div),
+            ]
+            .boxed()
+        }
     }
 
-    fn bracket_strategy() -> BoxedStrategy<Bracket> {
-        prop_oneof![Just(Bracket::RoundOpen), Just(Bracket::RoundClose),].boxed()
+    impl Arbitrary for Bracket {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![Just(Self::RoundOpen), Just(Self::RoundClose),].boxed()
+        }
     }
 
-    fn token_strategy() -> BoxedStrategy<Token> {
-        prop_oneof![
-            any::<f64>().prop_map(Token::Number),
-            identifier_strategy().prop_map(Token::Identifier),
-            operator_strategy().prop_map(Token::Operator),
-            bracket_strategy().prop_map(Token::Bracket),
-        ]
-        .boxed()
+    impl Arbitrary for Token {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            prop_oneof![
+                any::<f64>().prop_map(Self::Number),
+                identifier_strategy().prop_map(Self::Identifier),
+                any::<Operator>().prop_map(Self::Operator),
+                any::<Bracket>().prop_map(Self::Bracket),
+            ]
+            .boxed()
+        }
     }
 
     fn whitespace_strategy() -> BoxedStrategy<String> {
@@ -217,7 +229,7 @@ mod tests {
 
     prop_compose! {
         fn token_and_space()
-                          (token in token_strategy())
+                          (token in any::<Token>())
                           (token in Just(token.clone()),
                                 space in whitespace_for_token_strategy(&token))
                           -> (Token, String) {
@@ -256,7 +268,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn tokenize_simple_expression(lhs: f64, rhs: f64, op in operator_strategy()) {
+        fn tokenize_simple_expression(lhs: f64, rhs: f64, op: Operator) {
             let lexer_no_spaces = Lexer::new(&format!("{}{}{}", lhs, op, rhs)).unwrap();
             let lexer_with_spaces = Lexer::new(&format!("{} {} {}", lhs, op, rhs)).unwrap();
 
