@@ -3,6 +3,8 @@ use std::iter::Peekable;
 use std::ops::Deref;
 use std::str;
 
+use super::error::FormulaError;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Operator {
     Add,
@@ -97,10 +99,10 @@ impl<'a> PrefixTakable<'a> for str::Chars<'a> {
     }
 }
 
-fn get_number(it: &mut str::Chars) -> f64 {
+fn get_number(it: &mut str::Chars) -> Result<f64, FormulaError> {
     it.take_prefix(|c| c.is_ascii_digit() || *c == '.')
         .parse()
-        .unwrap()
+        .map_err(|err: std::num::ParseFloatError| FormulaError::LexerError(err.to_string()))
 }
 
 fn get_identifier<'a>(it: &'a mut str::Chars) -> &'a str {
@@ -108,14 +110,14 @@ fn get_identifier<'a>(it: &'a mut str::Chars) -> &'a str {
 }
 
 impl Lexer {
-    fn new(input: &str) -> Result<Lexer, String> {
+    fn new(input: &str) -> Result<Lexer, FormulaError> {
         let mut tokens = Vec::new();
 
         let mut it = input.chars();
         while let Some(c) = it.clone().next() {
             match c {
                 '0'..='9' => {
-                    let value = get_number(&mut it);
+                    let value = get_number(&mut it)?;
                     tokens.push(Token::Number(value));
                 }
                 x if x.is_alphabetic() => {
@@ -142,7 +144,10 @@ impl Lexer {
                 }
                 x if x.is_whitespace() => {}
                 _ => {
-                    return Err(format!("Unexpected symbol: {}", c));
+                    return Err(FormulaError::LexerError(format!(
+                        "Unexpected symbol: {}",
+                        c
+                    )));
                 }
             };
             it.next();
@@ -187,8 +192,8 @@ mod tests {
 
     #[test]
     fn tokenize_invalid() {
-        let lexer = Lexer::new("$");
-        assert!(lexer.is_err());
+        assert!(Lexer::new("$").is_err());
+        assert!(Lexer::new("1.0.0").is_err());
     }
 
     proptest! {
