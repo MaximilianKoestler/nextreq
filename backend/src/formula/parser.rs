@@ -25,6 +25,7 @@ pub enum Operator {
     Sub,
     Mul,
     Div,
+    Pos,
     Neg,
     Sqrt,
 }
@@ -36,6 +37,7 @@ impl fmt::Display for Operator {
             Self::Sub => "-",
             Self::Mul => "*",
             Self::Div => "/",
+            Self::Pos => "+",
             Self::Neg => "-",
             Self::Sqrt => "sqrt",
         };
@@ -91,12 +93,23 @@ impl Parser {
     fn expression(it: &mut PeekableToken, min_bp: u8) -> Result<Vec<ParseItem>, FormulaError> {
         let mut result = vec![];
 
-        let lhs = match it.next() {
-            Some(Token::Number(value)) => ParseItem::Value(Value::Number(*value)),
+        match it.next() {
+            Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
+            Some(Token::Operator(op)) => {
+                let ((), r_bp) = Self::prefix_binding_power(op);
+                let rhs = Self::expression(it, r_bp)?;
+
+                let op = match op {
+                    LexerOperator::Add => Operator::Pos,
+                    LexerOperator::Sub => Operator::Neg,
+                    _ => return Err(ParserError(format!("unsupported prefix operator: {}", op))),
+                };
+                result.extend(rhs);
+                result.push(ParseItem::Operator(op));
+            }
             Some(token) => return Err(ParserError(format!("unsupported token: {}", token))),
             None => return Err(ParserError("unexpected end of expression".to_owned())),
         };
-        result.push(lhs);
 
         loop {
             let op = match it.peek() {
@@ -117,6 +130,13 @@ impl Parser {
         }
 
         Ok(result)
+    }
+
+    fn prefix_binding_power(op: &LexerOperator) -> ((), u8) {
+        match op {
+            LexerOperator::Add | LexerOperator::Sub => ((), 5),
+            _ => panic!("bad prefix operator: {:?}", op),
+        }
     }
 
     fn infix_binding_power(op: &LexerOperator) -> (u8, u8) {
@@ -198,19 +218,25 @@ mod tests {
         }
     }
 
+    fn unary_operator() -> BoxedStrategy<LexerOperator> {
+        prop_oneof![Just(LexerOperator::Add), Just(LexerOperator::Sub),].boxed()
+    }
+
+    prop_compose! {
+        fn unary_expression(base: BoxedStrategy<TokenTree>)
+                          (operator in unary_operator(),
+                                operands in prop::collection::vec(base, 1))
+                          -> TokenTree {
+           TokenTree::Expression(operator, operands)
+       }
+    }
+
     prop_compose! {
         fn binary_expression(base: BoxedStrategy<TokenTree>)
                           (operator in any::<LexerOperator>(),
                                 operands in prop::collection::vec(base, 2))
                           -> TokenTree {
            TokenTree::Expression(operator, operands)
-       }
-    }
-    prop_compose! {
-        fn unary_expression(base: BoxedStrategy<TokenTree>)
-                          (operands in prop::collection::vec(base, 1))
-                          -> TokenTree {
-           TokenTree::Expression(LexerOperator::Sub, operands)
        }
     }
 
@@ -226,8 +252,8 @@ mod tests {
 
             leaf.prop_recursive(8, 64, 2, |inner| {
                 prop_oneof![
+                    unary_expression(inner.clone()),
                     binary_expression(inner.clone()),
-                    // unary_expression(inner.clone()),
                 ]
             })
             .boxed()
