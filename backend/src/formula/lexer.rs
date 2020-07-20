@@ -180,6 +180,7 @@ mod tests {
     impl Arbitrary for Operator {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
+
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             prop_oneof![
                 Just(Self::Add),
@@ -194,6 +195,7 @@ mod tests {
     impl Arbitrary for Bracket {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
+
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             prop_oneof![Just(Self::RoundOpen), Just(Self::RoundClose),].boxed()
         }
@@ -202,6 +204,7 @@ mod tests {
     impl Arbitrary for Token {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
+
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             prop_oneof![
                 any::<f64>().prop_map(Self::Number),

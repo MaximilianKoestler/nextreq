@@ -2,7 +2,7 @@ use std::fmt;
 use std::ops::Deref;
 
 use super::error::{FormulaError, FormulaError::ParserError};
-use super::lexer::{Operator as LexerOperator, Token};
+use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, Token};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -140,10 +140,97 @@ mod tests {
     use super::*;
     use itertools::Itertools;
     use proptest::prelude::*;
+    use std::iter::once;
 
     impl Parser {
-        fn test_str(&self) -> String {
+        fn postfix(&self) -> String {
             self.iter().map(|p| p.to_string()).join(" ")
+        }
+    }
+
+    #[derive(Debug)]
+    enum TokenTree {
+        Number(f64),
+        Variable(String),
+        Expression(LexerOperator, Vec<TokenTree>),
+    }
+
+    impl TokenTree {
+        fn postfix(&self) -> String {
+            match self {
+                TokenTree::Number(value) => value.to_string(),
+                TokenTree::Variable(name) => name.to_string(),
+                TokenTree::Expression(operator, operands) => operands
+                    .iter()
+                    .map(TokenTree::postfix)
+                    .chain(once(operator.to_string()))
+                    .join(" "),
+            }
+        }
+
+        fn infix(&self) -> Vec<Token> {
+            match self {
+                TokenTree::Number(value) => vec![Token::Number(*value)],
+                TokenTree::Variable(name) => vec![Token::Identifier(name.clone())],
+                TokenTree::Expression(operator, operands) => match operands.len() {
+                    1 => once(Token::Bracket(LexerBracket::RoundOpen))
+                        .chain(once(Token::Operator(operator.clone())))
+                        .chain(operands[0..1].iter().flat_map(TokenTree::infix))
+                        .chain(once(Token::Bracket(LexerBracket::RoundClose)))
+                        .filter(|p| match p {
+                            Token::Bracket(_) => false,
+                            _ => true,
+                        })
+                        .collect(),
+                    2 => once(Token::Bracket(LexerBracket::RoundOpen))
+                        .chain(operands[0..1].iter().flat_map(TokenTree::infix))
+                        .chain(once(Token::Operator(operator.clone())))
+                        .chain(operands[1..].iter().flat_map(TokenTree::infix))
+                        .chain(once(Token::Bracket(LexerBracket::RoundClose)))
+                        .filter(|p| match p {
+                            Token::Bracket(_) => false,
+                            _ => true,
+                        })
+                        .collect(),
+                    i => panic!("unsupported number of operands: {}", i),
+                },
+            }
+        }
+    }
+
+    prop_compose! {
+        fn binary_expression(base: BoxedStrategy<TokenTree>)
+                          (operator in any::<LexerOperator>(),
+                                operands in prop::collection::vec(base, 2))
+                          -> TokenTree {
+           TokenTree::Expression(operator, operands)
+       }
+    }
+    prop_compose! {
+        fn unary_expression(base: BoxedStrategy<TokenTree>)
+                          (operands in prop::collection::vec(base, 1))
+                          -> TokenTree {
+           TokenTree::Expression(LexerOperator::Sub, operands)
+       }
+    }
+
+    impl Arbitrary for TokenTree {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
+            let leaf = prop_oneof![
+                (0..100u32).prop_map(|v| TokenTree::Number(v as f64)),
+                // r"[[:lower:]]{1}".prop_map(TokenTree::Variable),
+            ];
+
+            leaf.prop_recursive(8, 64, 2, |inner| {
+                prop_oneof![
+                    binary_expression(inner.clone()),
+                    // unary_expression(inner.clone()),
+                ]
+            })
+            .boxed()
         }
     }
 
@@ -157,7 +244,7 @@ mod tests {
         fn parse_value(value: f64) {
             let tokens = vec![Token::Number(value)];
             let parser = Parser::new(&tokens).unwrap();
-            prop_assert_eq!(parser.test_str(), value.to_string());
+            prop_assert_eq!(parser.postfix(), value.to_string());
         }
     }
 
@@ -173,7 +260,7 @@ mod tests {
             ];
 
             let parser = Parser::new(&tokens).unwrap();
-            assert_eq!(parser.test_str(), expected);
+            assert_eq!(parser.postfix(), expected);
         }
     }
 
@@ -187,7 +274,7 @@ mod tests {
             Token::Number(3.0),
         ])
         .unwrap();
-        assert_eq!(parser.test_str(), format!("1 2 + 3 -"));
+        assert_eq!(parser.postfix(), format!("1 2 + 3 -"));
 
         let parser = Parser::new(&vec![
             Token::Number(1.0),
@@ -197,7 +284,7 @@ mod tests {
             Token::Number(3.0),
         ])
         .unwrap();
-        assert_eq!(parser.test_str(), format!("1 2 3 * +"));
+        assert_eq!(parser.postfix(), format!("1 2 3 * +"));
 
         let parser = Parser::new(&vec![
             Token::Number(1.0),
@@ -207,6 +294,14 @@ mod tests {
             Token::Number(3.0),
         ])
         .unwrap();
-        assert_eq!(parser.test_str(), format!("1 2 * 3 -"));
+        assert_eq!(parser.postfix(), format!("1 2 * 3 -"));
+    }
+
+    proptest! {
+        #[test]
+        fn arbitrary_expression(token_tree: TokenTree) {
+            let parser = Parser::new(&token_tree.infix()).unwrap();
+            // assert_eq!(parser.postfix(), token_tree.postfix());
+        }
     }
 }
