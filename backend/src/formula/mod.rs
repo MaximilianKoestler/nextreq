@@ -1,4 +1,4 @@
 mod error;
-mod lexer;
+pub mod lexer;
 
 struct Formula {}

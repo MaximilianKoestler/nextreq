@@ -9,5 +9,11 @@ edition = "2018"
 [dependencies]
 
 [dev-dependencies]
-proptest = "0.10.0"
+criterion = "*"
 itertools = "*"
+proptest = "*"
+rand = "*"
+
+[[bench]]
+name = "lexer"
+harness = false

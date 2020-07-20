@@ -1,2 +1,2 @@
-mod formula;
+pub mod formula;
 mod property;

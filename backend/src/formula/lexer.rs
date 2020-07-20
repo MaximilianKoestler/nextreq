@@ -5,7 +5,7 @@ use std::str;
 use super::error::FormulaError;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Operator {
+pub enum Operator {
     Add,
     Sub,
     Mul,
@@ -25,7 +25,7 @@ impl fmt::Display for Operator {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Bracket {
+pub enum Bracket {
     RoundOpen,
     RoundClose,
 }
@@ -41,7 +41,7 @@ impl fmt::Display for Bracket {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-enum Token {
+pub enum Token {
     Number(f64),
     Identifier(String),
     Operator(Operator),
@@ -59,7 +59,7 @@ impl fmt::Display for Token {
     }
 }
 
-struct Lexer {
+pub struct Lexer {
     tokens: Vec<Token>,
 }
 
@@ -109,7 +109,7 @@ fn get_identifier<'a>(it: &'a mut str::Chars) -> &'a str {
 }
 
 impl Lexer {
-    fn new(input: &str) -> Result<Lexer, FormulaError> {
+    pub fn new(input: &str) -> Result<Lexer, FormulaError> {
         let mut tokens = Vec::new();
 
         let mut it = input.chars();
@@ -169,6 +169,7 @@ mod tests {
     use super::*;
     use itertools::Itertools;
     use proptest::prelude::*;
+    use std::iter::once;
 
     fn identifier_strategy() -> BoxedStrategy<String> {
         proptest::string::string_regex(r"\p{Alphabetic}[\p{Alphabetic}\d]{0,32}")
@@ -331,8 +332,6 @@ mod tests {
         })]
         #[test]
         fn tokenize_random_expression(input in prop::collection::vec(token_and_space(), 0..64)) {
-            use std::iter::once;
-
             let token_str = input
                 .iter()
                 .flat_map(|(token, space)| once(token.to_string()).chain(once(space.clone())))
