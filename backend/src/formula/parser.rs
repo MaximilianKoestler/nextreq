@@ -1,6 +1,7 @@
 use std::fmt;
 use std::ops::Deref;
 
+use super::error::FormulaError;
 use super::lexer::{Operator as LexerOperator, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -81,18 +82,28 @@ pub struct Parser {
 type PeekableToken<'a> = std::iter::Peekable<std::slice::Iter<'a, Token>>;
 
 impl Parser {
-    pub fn new(tokens: &[Token]) -> Self {
-        let parsed_expression = Self::expression(&mut tokens.iter().peekable(), 0);
+    pub fn new(tokens: &[Token]) -> Result<Self, FormulaError> {
+        let parsed_expression = Self::expression(&mut tokens.iter().peekable(), 0)?;
 
-        Parser { parsed_expression }
+        Ok(Parser { parsed_expression })
     }
 
-    fn expression(it: &mut PeekableToken, min_bp: u8) -> Vec<ParseItem> {
+    fn expression(it: &mut PeekableToken, min_bp: u8) -> Result<Vec<ParseItem>, FormulaError> {
         let mut result = vec![];
 
         let lhs = match it.next() {
             Some(Token::Number(value)) => ParseItem::Value(Value::Number(*value)),
-            t => panic!("Unsupported token: {:?}", t),
+            Some(token) => {
+                return Err(FormulaError::ParserError(format!(
+                    "unsupported token: {}",
+                    token
+                )))
+            }
+            None => {
+                return Err(FormulaError::ParserError(
+                    "unexpected end of expression".to_owned(),
+                ))
+            }
         };
         result.push(lhs);
 
@@ -109,12 +120,12 @@ impl Parser {
             }
 
             it.next();
-            let rhs = Self::expression(it, r_bp);
+            let rhs = Self::expression(it, r_bp)?;
             result.extend(rhs);
             result.push(op.into());
         }
 
-        result
+        Ok(result)
     }
 
     fn infix_binding_power(op: &LexerOperator) -> (u8, u8) {
@@ -145,11 +156,16 @@ mod tests {
         }
     }
 
+    #[test]
+    fn tokenize_invalid() {
+        assert!(Parser::new(&vec![Token::Operator(LexerOperator::Add)]).is_err());
+    }
+
     proptest! {
         #[test]
         fn parse_value(value: f64) {
             let tokens = vec![Token::Number(value)];
-            let parser = Parser::new(&tokens);
+            let parser = Parser::new(&tokens).unwrap();
             prop_assert_eq!(parser.test_str(), value.to_string());
         }
     }
@@ -165,7 +181,7 @@ mod tests {
                 Token::Number(rhs),
             ];
 
-            let parser = Parser::new(&tokens);
+            let parser = Parser::new(&tokens).unwrap();
             assert_eq!(parser.test_str(), expected);
         }
     }
@@ -178,7 +194,8 @@ mod tests {
             Token::Number(2.0),
             Token::Operator(LexerOperator::Sub),
             Token::Number(3.0),
-        ]);
+        ])
+        .unwrap();
         assert_eq!(parser.test_str(), format!("1 2 + 3 -"));
 
         let parser = Parser::new(&vec![
@@ -187,7 +204,8 @@ mod tests {
             Token::Number(2.0),
             Token::Operator(LexerOperator::Mul),
             Token::Number(3.0),
-        ]);
+        ])
+        .unwrap();
         assert_eq!(parser.test_str(), format!("1 2 3 * +"));
 
         let parser = Parser::new(&vec![
@@ -196,7 +214,8 @@ mod tests {
             Token::Number(2.0),
             Token::Operator(LexerOperator::Sub),
             Token::Number(3.0),
-        ]);
+        ])
+        .unwrap();
         assert_eq!(parser.test_str(), format!("1 2 * 3 -"));
     }
 }

@@ -134,7 +134,7 @@ impl Lexer {
                 x if x.is_whitespace() => {}
                 _ => {
                     return Err(FormulaError::LexerError(format!(
-                        "Unexpected symbol: {}",
+                        "unexpected symbol: {}",
                         c
                     )));
                 }
