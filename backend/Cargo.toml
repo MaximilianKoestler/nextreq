@@ -10,3 +10,4 @@ edition = "2018"
 
 [dev-dependencies]
 proptest = "0.10.0"
+itertools = "*"

@@ -1,5 +1,4 @@
 use std::fmt;
-use std::iter::Peekable;
 use std::ops::Deref;
 use std::str;
 
@@ -41,7 +40,7 @@ impl fmt::Display for Bracket {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 enum Token {
     Number(f64),
     Identifier(String),
@@ -86,7 +85,7 @@ impl<'a> PrefixTakable<'a> for str::Chars<'a> {
             .clone()
             .take_while(predicate)
             .map(|c| c.len_utf8())
-            .fold((0, 0), |acc, x| (acc.0 + 1, acc.1 + x));
+            .fold((0, 0), |(count, end), len| (count + 1, end + len));
 
         // upon returning, `it` must point to the char matching the predicate
         // `it + count` points at the first non-matching or at the end of the string
@@ -168,7 +167,14 @@ impl Deref for Lexer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use itertools::Itertools;
     use proptest::prelude::*;
+
+    fn identifier_strategy() -> BoxedStrategy<String> {
+        proptest::string::string_regex(r"\p{Alphabetic}[\p{Alphabetic}\d]*")
+            .unwrap()
+            .boxed()
+    }
 
     fn operator_strategy() -> BoxedStrategy<Operator> {
         prop_oneof![
@@ -180,14 +186,41 @@ mod tests {
         .boxed()
     }
 
-    fn identifier_strategy() -> BoxedStrategy<String> {
-        proptest::string::string_regex(r"\p{Alphabetic}[\p{Alphabetic}\d]*")
-            .unwrap()
-            .boxed()
+    fn bracket_strategy() -> BoxedStrategy<Bracket> {
+        prop_oneof![Just(Bracket::RoundOpen), Just(Bracket::RoundClose),].boxed()
+    }
+
+    fn token_strategy() -> BoxedStrategy<Token> {
+        prop_oneof![
+            any::<f64>().prop_map(Token::Number),
+            identifier_strategy().prop_map(Token::Identifier),
+            operator_strategy().prop_map(Token::Operator),
+            bracket_strategy().prop_map(Token::Bracket),
+        ]
+        .boxed()
     }
 
     fn whitespace_strategy() -> BoxedStrategy<String> {
         proptest::string::string_regex(r"\s*").unwrap().boxed()
+    }
+
+    fn whitespace_for_token_strategy(token: &Token) -> BoxedStrategy<String> {
+        proptest::string::string_regex(match token {
+            Token::Number(_) | Token::Identifier(_) => r"\s+",
+            _ => r"\s*",
+        })
+        .unwrap()
+        .boxed()
+    }
+
+    prop_compose! {
+        fn token_and_space()
+                          (token in token_strategy())
+                          (token in Just(token.clone()),
+                                space in whitespace_for_token_strategy(&token))
+                          -> (Token, String) {
+           (token, space)
+       }
     }
 
     #[test]
@@ -272,5 +305,36 @@ mod tests {
             Token::Identifier("你好".to_owned()),
         ];
         assert_eq!(&lexer[..], &expected[..]);
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 32,
+            max_shrink_iters: 2048,
+            .. ProptestConfig::default()
+        })]
+        #[test]
+        fn tokenize_random_expression(input in prop::collection::vec(token_and_space(), 0..64)) {
+            use std::iter::once;
+
+            let token_str = input
+                .iter()
+                .flat_map(|(token, space)| once(token.to_string()).chain(once(space.clone())))
+                .join("");
+
+            let tokens: Vec<_> = input
+                .into_iter()
+                .map(|(token, _)| token)
+                .flat_map(|token| match token {
+                    Token::Number(value) if value < 0.0 => {
+                        vec![Token::Operator(Operator::Sub), Token::Number(value.abs())]
+                    }
+                    _ => vec![token],
+                })
+                .collect();
+
+            let lexer = Lexer::new(&token_str).unwrap();
+            assert_eq!(&lexer[..], &tokens[..]);
+        }
     }
 }
