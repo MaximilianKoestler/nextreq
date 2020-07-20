@@ -63,8 +63,17 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(tokens: &[Token]) -> Self {
-        let parsed_expression = vec![ParseItem::Value(Value::Number(0.0))];
+        let parsed_expression = Self::expression(&mut tokens.iter());
+
         Parser { parsed_expression }
+    }
+
+    fn expression(it: &mut std::slice::Iter<'_, Token>) -> Vec<ParseItem> {
+        let lhs = match it.next() {
+            Some(Token::Number(value)) => ParseItem::Value(Value::Number(*value)),
+            t => panic!("Unsupported token: {:?}", t),
+        };
+        vec![lhs]
     }
 }
 
@@ -79,13 +88,21 @@ impl Deref for Parser {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use itertools::Itertools;
+    use proptest::prelude::*;
 
-    #[test]
-    fn parse_value() {
-        let tokens = vec![Token::Number(0.0)];
-        let parser = Parser::new(&tokens);
+    impl Parser {
+        fn test_str(&self) -> String {
+            self.iter().map(|p| p.to_string()).join(" ")
+        }
+    }
 
-        let expected = vec![ParseItem::Value(Value::Number(0.0))];
-        assert_eq!(&parser[..], &expected[..]);
+    proptest! {
+        #[test]
+        fn parse_value(value: f64) {
+            let tokens = vec![Token::Number(value)];
+            let parser = Parser::new(&tokens);
+            prop_assert_eq!(parser.test_str(), value.to_string());
+        }
     }
 }
