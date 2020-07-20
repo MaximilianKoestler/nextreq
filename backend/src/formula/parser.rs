@@ -37,8 +37,8 @@ impl fmt::Display for Operator {
             Self::Sub => "-",
             Self::Mul => "*",
             Self::Div => "/",
-            Self::Pos => "+",
-            Self::Neg => "-",
+            Self::Pos => "⊕",
+            Self::Neg => "⊖",
             Self::Sqrt => "sqrt",
         };
         write!(f, "{}", op)
@@ -96,55 +96,55 @@ impl Parser {
         match it.next() {
             Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
             Some(Token::Operator(op)) => {
-                let ((), r_bp) = Self::prefix_binding_power(op);
-                let rhs = Self::expression(it, r_bp)?;
+                let bp = Self::prefix_binding_power(op)?;
+                result.extend(Self::expression(it, bp)?);
 
                 let op = match op {
                     LexerOperator::Add => Operator::Pos,
                     LexerOperator::Sub => Operator::Neg,
-                    _ => return Err(ParserError(format!("unsupported prefix operator: {}", op))),
+                    _ => return Err(ParserError(format!("unsupported unary operator: {}", op))),
                 };
-                result.extend(rhs);
                 result.push(ParseItem::Operator(op));
             }
             Some(Token::Bracket(LexerBracket::RoundOpen)) => {
-                let lhs = Self::expression(it, 0)?;
+                result.extend(Self::expression(it, 0)?);
                 assert_eq!(
                     it.next().unwrap(),
                     &Token::Bracket(LexerBracket::RoundClose)
                 );
-                result.extend(lhs);
             }
-            Some(token) => return Err(ParserError(format!("unsupported token: {}", token))),
+            Some(token) => return Err(ParserError(format!("unsupported start token: {}", token))),
             None => return Err(ParserError("unexpected end of expression".to_owned())),
         };
 
         loop {
-            let op = match it.peek() {
-                None => break,
+            match it.peek() {
                 Some(Token::Bracket(LexerBracket::RoundClose)) => break,
-                Some(Token::Operator(op)) => op,
-                t => panic!("bad token: {:?}", t),
+                Some(Token::Operator(op)) => {
+                    let (l_bp, r_bp) = Self::infix_binding_power(op);
+
+                    if l_bp < min_bp {
+                        break;
+                    }
+
+                    it.next();
+                    result.extend(Self::expression(it, r_bp)?);
+                    result.push(op.into());
+                }
+                Some(token) => {
+                    return Err(ParserError(format!("unsupported start token: {}", token)))
+                }
+                None => break,
             };
-            let (l_bp, r_bp) = Self::infix_binding_power(op);
-
-            if l_bp < min_bp {
-                break;
-            }
-
-            it.next();
-            let rhs = Self::expression(it, r_bp)?;
-            result.extend(rhs);
-            result.push(op.into());
         }
 
         Ok(result)
     }
 
-    fn prefix_binding_power(op: &LexerOperator) -> ((), u8) {
+    fn prefix_binding_power(op: &LexerOperator) -> Result<u8, FormulaError> {
         match op {
-            LexerOperator::Add | LexerOperator::Sub => ((), 5),
-            _ => panic!("bad prefix operator: {:?}", op),
+            LexerOperator::Add | LexerOperator::Sub => Ok(5),
+            _ => return Err(ParserError(format!("unsupported unary operator: {}", op))),
         }
     }
 
@@ -192,7 +192,11 @@ mod tests {
                 TokenTree::Expression(operator, operands) => operands
                     .iter()
                     .map(TokenTree::postfix)
-                    .chain(once(operator.to_string()))
+                    .chain(once(match operator {
+                        LexerOperator::Add if operands.len() == 1 => "⊕".to_owned(),
+                        LexerOperator::Sub if operands.len() == 1 => "⊖".to_owned(),
+                        _ => operator.to_string(),
+                    }))
                     .join(" "),
             }
         }
@@ -202,19 +206,24 @@ mod tests {
                 TokenTree::Number(value) => vec![Token::Number(*value)],
                 TokenTree::Variable(name) => vec![Token::Identifier(name.clone())],
                 TokenTree::Expression(operator, operands) => match operands.len() {
-                    1 => once(Token::Bracket(LexerBracket::RoundOpen))
-                        .chain(once(Token::Operator(operator.clone())))
-                        .chain(operands[0..1].iter().flat_map(TokenTree::infix))
-                        .chain(once(Token::Bracket(LexerBracket::RoundClose)))
-                        .collect(),
-                    2 => once(Token::Bracket(LexerBracket::RoundOpen))
-                        .chain(operands[0..1].iter().flat_map(TokenTree::infix))
-                        .chain(once(Token::Operator(operator.clone())))
-                        .chain(operands[1..].iter().flat_map(TokenTree::infix))
-                        .chain(once(Token::Bracket(LexerBracket::RoundClose)))
-                        .collect(),
+                    1 => vec![
+                        vec![Token::Bracket(LexerBracket::RoundOpen)],
+                        vec![Token::Operator(operator.clone())],
+                        operands[0].infix(),
+                        vec![Token::Bracket(LexerBracket::RoundClose)],
+                    ],
+                    2 => vec![
+                        vec![Token::Bracket(LexerBracket::RoundOpen)],
+                        operands[0].infix(),
+                        vec![Token::Operator(operator.clone())],
+                        operands[1].infix(),
+                        vec![Token::Bracket(LexerBracket::RoundClose)],
+                    ],
                     i => panic!("unsupported number of operands: {}", i),
-                },
+                }
+                .into_iter()
+                .flatten()
+                .collect(),
             }
         }
     }
