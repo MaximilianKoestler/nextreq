@@ -79,8 +79,18 @@ impl Parser {
         match it.next() {
             Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
             Some(Token::Identifier(name)) => {
-                // TODO: function!
-                result.push(ParseItem::Value(Value::Variable(name.clone())))
+                if let Some(Token::Bracket(LexerBracket::RoundOpen)) = it.peek() {
+                    it.next();
+                    result.extend(Self::expression(it, 0)?);
+                    assert_eq!(
+                        it.next().unwrap(),
+                        &Token::Bracket(LexerBracket::RoundClose)
+                    );
+                    let op = Self::function_operator(name)?;
+                    result.push(ParseItem::Operator(op));
+                } else {
+                    result.push(ParseItem::Value(Value::Variable(name.clone())))
+                }
             }
             Some(Token::Operator(op)) => {
                 let op = match op {
@@ -147,6 +157,13 @@ impl Parser {
             _ => panic!("unsupported binary operator: {}", op),
         }
     }
+
+    fn function_operator(name: &String) -> Result<Operator, FormulaError> {
+        match name.to_lowercase().as_str() {
+            "sqrt" => Ok(Operator::Sqrt),
+            _ => Err(ParserError(format!("unsupported function: {}", name))),
+        }
+    }
 }
 
 impl Deref for Parser {
@@ -175,6 +192,7 @@ mod tests {
         Number(f64),
         Variable(String),
         Expression(LexerOperator, Vec<TokenTree>),
+        Function(String, Vec<TokenTree>),
     }
 
     impl TokenTree {
@@ -190,6 +208,11 @@ mod tests {
                         LexerOperator::Minus if operands.len() == 1 => "⊖".to_owned(),
                         _ => operator.to_string(),
                     }))
+                    .join(" "),
+                TokenTree::Function(name, operands) => operands
+                    .iter()
+                    .map(TokenTree::postfix)
+                    .chain(once(name.clone()))
                     .join(" "),
             }
         }
@@ -217,12 +240,21 @@ mod tests {
                 .into_iter()
                 .flatten()
                 .collect(),
+                TokenTree::Function(name, operands) => once(Token::Identifier(name.clone()))
+                    .chain(once(Token::Bracket(LexerBracket::RoundOpen)))
+                    .chain(operands.iter().flat_map(TokenTree::infix))
+                    .chain(once(Token::Bracket(LexerBracket::RoundClose)))
+                    .collect(),
             }
         }
     }
 
     fn unary_operator() -> BoxedStrategy<LexerOperator> {
         prop_oneof![Just(LexerOperator::Plus), Just(LexerOperator::Minus),].boxed()
+    }
+
+    fn unary_function() -> BoxedStrategy<String> {
+        prop_oneof![Just("sqrt".to_owned()),].boxed()
     }
 
     prop_compose! {
@@ -243,6 +275,15 @@ mod tests {
        }
     }
 
+    prop_compose! {
+        fn unary_function_expression(base: BoxedStrategy<TokenTree>)
+                          (name in unary_function(),
+                                operands in prop::collection::vec(base, 1))
+                          -> TokenTree {
+           TokenTree::Function(name, operands)
+       }
+    }
+
     impl Arbitrary for TokenTree {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
@@ -257,6 +298,7 @@ mod tests {
                 prop_oneof![
                     unary_expression(inner.clone()),
                     binary_expression(inner.clone()),
+                    unary_function_expression(inner.clone()),
                 ]
             })
             .boxed()
@@ -358,10 +400,21 @@ mod tests {
         assert_eq!(parser.postfix(), format!("1 2 + 3 *"));
     }
 
+    #[test]
+    fn parse_function() {
+        let parser = Parser::new(&vec![
+            Token::Identifier("sqrt".to_owned()),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.0),
+            Token::Bracket(LexerBracket::RoundClose),
+        ])
+        .unwrap();
+        assert_eq!(parser.postfix(), format!("1 sqrt"));
+    }
+
     proptest! {
         #![proptest_config(ProptestConfig {
-            cases: 32,
-            max_shrink_iters: 20048,
+            max_shrink_iters: 2048,
             .. ProptestConfig::default()
         })]
         #[test]
