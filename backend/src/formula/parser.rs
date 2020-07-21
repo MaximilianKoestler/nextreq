@@ -433,7 +433,7 @@ mod tests {
     proptest! {
         #[test]
         fn tokenizer_does_not_crash(input in prop::collection::vec(any::<Token>(), 0..64)) {
-            let parser = Parser::new(&input);
+            let _ = Parser::new(&input);
         }
     }
 }
