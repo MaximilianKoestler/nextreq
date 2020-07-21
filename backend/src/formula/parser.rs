@@ -76,7 +76,7 @@ impl Parser {
     pub fn new(tokens: &[Token]) -> Result<Self, FormulaError> {
         let parsed_expression = Self::expression(&mut tokens.iter().peekable(), 0)?;
 
-        Ok(Parser { parsed_expression })
+        Ok(Self { parsed_expression })
     }
 
     fn expression(it: &mut PeekableToken, min_bp: u8) -> Result<Vec<ParseItem>, FormulaError> {
@@ -181,7 +181,7 @@ impl Deref for Parser {
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use itertools::Itertools;
     use proptest::prelude::*;
@@ -194,7 +194,7 @@ mod tests {
     }
 
     #[derive(Debug)]
-    enum TokenTree {
+    pub enum TokenTree {
         Number(f64),
         Variable(String),
         Expression(LexerOperator, Vec<TokenTree>),
@@ -223,7 +223,7 @@ mod tests {
             }
         }
 
-        fn infix(&self) -> Vec<Token> {
+        pub fn infix(&self) -> Vec<Token> {
             match self {
                 TokenTree::Number(value) => vec![Token::Number(*value)],
                 TokenTree::Variable(name) => vec![Token::Identifier(name.clone())],

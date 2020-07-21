@@ -142,7 +142,7 @@ impl Lexer {
             it.next();
         }
 
-        Ok(Lexer { tokens })
+        Ok(Self { tokens })
     }
 
     fn get_number(it: &mut str::Chars) -> Result<f64, FormulaError> {
