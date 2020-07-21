@@ -20,10 +20,8 @@ impl Formula {
         for item in self.parser.iter() {
             match item {
                 parser::ParseItem::Value(v) => match v {
-                    parser::Value::Number(value) => {
-                        stack.push(*value);
-                    }
-                    parser::Value::Variable(name) => todo!(),
+                    parser::Value::Number(value) => stack.push(*value),
+                    parser::Value::Variable(name) => stack.push(0.0),
                 },
                 parser::ParseItem::Operator(op) => match op {
                     parser::Operator::Add => {
@@ -31,9 +29,21 @@ impl Formula {
                         let rhs = stack.pop().unwrap();
                         stack.push(lhs + rhs);
                     }
-                    parser::Operator::Sub => {}
-                    parser::Operator::Mul => {}
-                    parser::Operator::Div => {}
+                    parser::Operator::Sub => {
+                        let lhs = stack.pop().unwrap();
+                        let rhs = stack.pop().unwrap();
+                        stack.push(0.0);
+                    }
+                    parser::Operator::Mul => {
+                        let lhs = stack.pop().unwrap();
+                        let rhs = stack.pop().unwrap();
+                        stack.push(0.0);
+                    }
+                    parser::Operator::Div => {
+                        let lhs = stack.pop().unwrap();
+                        let rhs = stack.pop().unwrap();
+                        stack.push(0.0);
+                    }
                     parser::Operator::Pos => {}
                     parser::Operator::Neg => {}
                     parser::Operator::Sqrt => {}
@@ -55,7 +65,6 @@ mod tests {
     fn evaluate_simple_addition() {
         let formula = Formula::new("1 + 1").unwrap();
         let result = formula.eval();
-
         assert_eq!(result, 2.0)
     }
 
@@ -68,7 +77,7 @@ mod tests {
         fn evaluate_arbitrary_expression(token_tree: parser::tests::TokenTree) {
             let infix_str = token_tree.infix().iter().map(lexer::Token::to_string).join("");
             let formula = Formula::new(&infix_str).unwrap();
-            // formula.eval();
+            formula.eval();
         }
     }
 }
