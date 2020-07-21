@@ -91,6 +91,15 @@ impl Formula {
                         let rhs = take!(stack);
                         stack.push(-rhs);
                     }
+                    parser::Operator::Fac => {
+                        // all factorials larger than `170!` will overflow an `f64`
+                        let lhs = take!(stack);
+                        stack.push(match lhs {
+                            _ if lhs < 0.0 => std::f64::NAN,
+                            _ if lhs > 170.0 => std::f64::INFINITY,
+                            _ => (1..=(lhs as u32)).fold(1.0, |a, b| a * b as f64),
+                        });
+                    }
                     parser::Operator::Sqrt => {
                         let rhs = take!(stack);
                         stack.push(rhs.sqrt());
@@ -163,6 +172,13 @@ mod tests {
         let formula = Formula::new("- 1").unwrap();
         let result = formula.eval().unwrap();
         assert_eq!(result, -1.0)
+    }
+
+    #[test]
+    fn evaluate_factorial() {
+        let formula = Formula::new("3 !").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, 6.0)
     }
 
     #[test]

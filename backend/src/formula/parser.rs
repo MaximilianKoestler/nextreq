@@ -28,6 +28,7 @@ pub enum Operator {
     Pow,
     Pos,
     Neg,
+    Fac,
     Sqrt,
 }
 
@@ -41,6 +42,7 @@ impl fmt::Display for Operator {
             Self::Pow => "^",
             Self::Pos => "⊕",
             Self::Neg => "⊖",
+            Self::Fac => "!",
             Self::Sqrt => "sqrt",
         };
         write!(f, "{}", op)
@@ -135,14 +137,23 @@ impl Parser {
                         LexerOperator::Star => Operator::Mul,
                         LexerOperator::Slash => Operator::Div,
                         LexerOperator::Caret => Operator::Pow,
+                        LexerOperator::ExclamationMark => Operator::Fac,
                     };
-                    let (l_bp, r_bp) = Self::infix_binding_power(&op);
-                    if l_bp < min_bp {
-                        break;
-                    }
 
-                    it.next();
-                    result.extend(Self::expression(it, r_bp)?);
+                    if let Some(l_bp) = Self::postfix_binding_power(&op) {
+                        if l_bp < min_bp {
+                            break;
+                        }
+                        it.next();
+                    } else {
+                        let (l_bp, r_bp) = Self::infix_binding_power(&op);
+                        if l_bp < min_bp {
+                            break;
+                        }
+
+                        it.next();
+                        result.extend(Self::expression(it, r_bp)?);
+                    }
                     result.push(ParseItem::Operator(op));
                 }
                 Some(token) => error!("unsupported start token: {}", token),
@@ -154,7 +165,7 @@ impl Parser {
     }
 
     fn function_binding_power() -> u8 {
-        7
+        255
     }
 
     fn prefix_binding_power(op: &Operator) -> u8 {
@@ -170,6 +181,13 @@ impl Parser {
             Operator::Mul | Operator::Div => (3, 4),
             Operator::Pow => (5, 6),
             _ => panic!("unsupported binary operator: {}", op),
+        }
+    }
+
+    fn postfix_binding_power(op: &Operator) -> Option<u8> {
+        match op {
+            Operator::Fac => Some(9),
+            _ => None,
         }
     }
 
@@ -206,8 +224,20 @@ pub mod tests {
     pub enum TokenTree {
         Number(f64),
         Variable(String),
-        Expression(LexerOperator, Vec<TokenTree>),
+        Expression(
+            Option<Box<TokenTree>>,
+            LexerOperator,
+            Option<Box<TokenTree>>,
+        ),
         Function(String, Vec<TokenTree>),
+    }
+
+    fn unary_operator_str(op: &LexerOperator) -> &'static str {
+        match op {
+            LexerOperator::Plus => "⊕",
+            LexerOperator::Minus => "⊖",
+            _ => panic!("not a unary operator: {}", op),
+        }
     }
 
     impl TokenTree {
@@ -215,12 +245,12 @@ pub mod tests {
             match self {
                 TokenTree::Number(value) => value.to_string(),
                 TokenTree::Variable(name) => name.to_string(),
-                TokenTree::Expression(operator, operands) => operands
-                    .iter()
-                    .map(TokenTree::postfix)
+                TokenTree::Expression(lhs, operator, rhs) => once(lhs)
+                    .chain(once(rhs))
+                    .filter_map(|t| t.as_ref())
+                    .map(|t| t.postfix())
                     .chain(once(match operator {
-                        LexerOperator::Plus if operands.len() == 1 => "⊕".to_owned(),
-                        LexerOperator::Minus if operands.len() == 1 => "⊖".to_owned(),
+                        op if lhs.is_none() => unary_operator_str(op).to_owned(),
                         _ => operator.to_string(),
                     }))
                     .join(" "),
@@ -236,21 +266,27 @@ pub mod tests {
             match self {
                 TokenTree::Number(value) => vec![Token::Number(*value)],
                 TokenTree::Variable(name) => vec![Token::Identifier(name.clone())],
-                TokenTree::Expression(operator, operands) => match operands.len() {
-                    1 => vec![
+                TokenTree::Expression(lhs, operator, rhs) => match (lhs.is_some(), rhs.is_some()) {
+                    (false, true) => vec![
                         vec![Token::Bracket(LexerBracket::RoundOpen)],
                         vec![Token::Operator(operator.clone())],
-                        operands[0].infix(),
+                        rhs.as_ref().unwrap().infix(),
                         vec![Token::Bracket(LexerBracket::RoundClose)],
                     ],
-                    2 => vec![
+                    (true, true) => vec![
                         vec![Token::Bracket(LexerBracket::RoundOpen)],
-                        operands[0].infix(),
+                        lhs.as_ref().unwrap().infix(),
                         vec![Token::Operator(operator.clone())],
-                        operands[1].infix(),
+                        rhs.as_ref().unwrap().infix(),
                         vec![Token::Bracket(LexerBracket::RoundClose)],
                     ],
-                    i => panic!("unsupported number of operands: {}", i),
+                    (true, false) => vec![
+                        vec![Token::Bracket(LexerBracket::RoundOpen)],
+                        lhs.as_ref().unwrap().infix(),
+                        vec![Token::Operator(operator.clone())],
+                        vec![Token::Bracket(LexerBracket::RoundClose)],
+                    ],
+                    (false, false) => panic!("expression without operands!"),
                 }
                 .into_iter()
                 .flatten()
@@ -267,9 +303,10 @@ pub mod tests {
             match self {
                 TokenTree::Number(_) => vec![],
                 TokenTree::Variable(name) => vec![name],
-                TokenTree::Expression(_, operands) => operands
-                    .into_iter()
-                    .map(TokenTree::variables)
+                TokenTree::Expression(lhs, _, rhs) => once(lhs)
+                    .chain(once(rhs))
+                    .filter_map(|t| t)
+                    .map(|t| t.variables())
                     .flatten()
                     .collect(),
                 TokenTree::Function(_, operands) => operands
@@ -281,8 +318,23 @@ pub mod tests {
         }
     }
 
-    fn unary_operator() -> BoxedStrategy<LexerOperator> {
+    fn unary_prefix_operator() -> BoxedStrategy<LexerOperator> {
         prop_oneof![Just(LexerOperator::Plus), Just(LexerOperator::Minus),].boxed()
+    }
+
+    fn binary_infix_operator() -> BoxedStrategy<LexerOperator> {
+        prop_oneof![
+            Just(LexerOperator::Plus),
+            Just(LexerOperator::Minus),
+            Just(LexerOperator::Star),
+            Just(LexerOperator::Slash),
+            Just(LexerOperator::Caret),
+        ]
+        .boxed()
+    }
+
+    fn unary_postfix_operator() -> BoxedStrategy<LexerOperator> {
+        prop_oneof![Just(LexerOperator::ExclamationMark),].boxed()
     }
 
     fn unary_function() -> BoxedStrategy<String> {
@@ -290,20 +342,31 @@ pub mod tests {
     }
 
     prop_compose! {
-        fn unary_expression(base: BoxedStrategy<TokenTree>)
-                          (operator in unary_operator(),
-                                operands in prop::collection::vec(base, 1))
+        fn unary_prefix_expression(base: BoxedStrategy<TokenTree>)
+                          (operator in unary_prefix_operator(),
+                                rhs in base)
                           -> TokenTree {
-           TokenTree::Expression(operator, operands)
+
+           TokenTree::Expression(None, operator, Some(Box::new(rhs)))
        }
     }
 
     prop_compose! {
-        fn binary_expression(base: BoxedStrategy<TokenTree>)
-                          (operator in any::<LexerOperator>(),
-                                operands in prop::collection::vec(base, 2))
+        fn binary_infix_expression(base: BoxedStrategy<TokenTree>)
+                          (operator in binary_infix_operator(),
+                                lhs in base.clone(),
+                                rhs in base)
                           -> TokenTree {
-           TokenTree::Expression(operator, operands)
+            TokenTree::Expression(Some(Box::new(lhs)), operator, Some(Box::new(rhs)))
+       }
+    }
+
+    prop_compose! {
+        fn unary_postfix_expression(base: BoxedStrategy<TokenTree>)
+                          (operator in unary_postfix_operator(),
+                                lhs in base)
+                          -> TokenTree {
+           TokenTree::Expression(Some(Box::new(lhs)), operator, None)
        }
     }
 
@@ -328,8 +391,9 @@ pub mod tests {
 
             leaf.prop_recursive(32, 1024, 2, |inner| {
                 prop_oneof![
-                    unary_expression(inner.clone()),
-                    binary_expression(inner.clone()),
+                    unary_prefix_expression(inner.clone()),
+                    unary_postfix_expression(inner.clone()),
+                    binary_infix_expression(inner.clone()),
                     unary_function_expression(inner.clone()),
                 ]
             })
@@ -378,13 +442,43 @@ pub mod tests {
 
     proptest! {
         #[test]
-        fn parse_simple_expression(lhs: f64, rhs: f64, op: LexerOperator) {
+        fn parse_binary_expression(lhs: f64, rhs: f64, op in binary_infix_operator()) {
             let expected = format!("{} {} {}", lhs, rhs, op);
 
             let tokens = vec![
                 Token::Number(lhs),
                 Token::Operator(op),
                 Token::Number(rhs),
+            ];
+
+            let parser = Parser::new(&tokens).unwrap();
+            assert_eq!(parser.postfix(), expected);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn parse_unary_prefix_expression(rhs: f64, op in unary_prefix_operator()) {
+            let expected = format!("{} {}", rhs, unary_operator_str(&op));
+
+            let tokens = vec![
+                Token::Operator(op),
+                Token::Number(rhs),
+            ];
+
+            let parser = Parser::new(&tokens).unwrap();
+            assert_eq!(parser.postfix(), expected);
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn parse_unary_postfix_expression(lhs: f64, op in unary_postfix_operator()) {
+            let expected = format!("{} {}", lhs, &op);
+
+            let tokens = vec![
+                Token::Number(lhs),
+                Token::Operator(op),
             ];
 
             let parser = Parser::new(&tokens).unwrap();
