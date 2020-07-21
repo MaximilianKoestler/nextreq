@@ -104,6 +104,9 @@ impl Formula {
                         let rhs = take!(stack);
                         stack.push(rhs.sqrt());
                     }
+                    parser::Operator::Round => {
+                        todo!();
+                    }
                 },
             }
         }

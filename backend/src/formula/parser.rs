@@ -30,6 +30,7 @@ pub enum Operator {
     Neg,
     Fac,
     Sqrt,
+    Round,
 }
 
 impl fmt::Display for Operator {
@@ -44,6 +45,7 @@ impl fmt::Display for Operator {
             Self::Neg => "⊖",
             Self::Fac => "!",
             Self::Sqrt => "sqrt",
+            Self::Round => "round",
         };
         write!(f, "{}", op)
     }
@@ -195,6 +197,7 @@ impl Parser {
     fn function_operator(name: &String) -> Result<Operator, FormulaError> {
         match name.to_lowercase().as_str() {
             "sqrt" => Ok(Operator::Sqrt),
+            "round" => Ok(Operator::Round),
             _ => error!("unsupported function: {}", name),
         }
     }
@@ -533,7 +536,7 @@ pub mod tests {
     }
 
     #[test]
-    fn parse_function() {
+    fn parse_single_parameter_function() {
         let parser = Parser::new(&vec![
             Token::Identifier("sqrt".to_owned()),
             Token::Bracket(LexerBracket::RoundOpen),
@@ -542,6 +545,20 @@ pub mod tests {
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 sqrt"));
+    }
+
+    #[test]
+    fn parse_multi_parameter_function() {
+        // let parser = Parser::new(&vec![
+        //     Token::Identifier("round".to_owned()),
+        //     Token::Bracket(LexerBracket::RoundOpen),
+        //     Token::Number(1.5),
+        //     Token::Operator(LexerOperator::Comma),
+        //     Token::Number(2.0),
+        //     Token::Bracket(LexerBracket::RoundClose),
+        // ])
+        // .unwrap();
+        // assert_eq!(parser.postfix(), format!("1.5 2 round"));
     }
 
     proptest! {
