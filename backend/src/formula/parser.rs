@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::Deref;
 
-use super::error::{FormulaError, FormulaError::ParserError};
+use super::error::FormulaError;
 use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, Token};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -66,6 +66,12 @@ pub struct Parser {
 
 type PeekableToken<'a> = std::iter::Peekable<std::slice::Iter<'a, Token>>;
 
+macro_rules! error {
+    ($($arg:tt)*) => {{
+        return Err(FormulaError::ParserError(format!($($arg)*)))
+    }}
+}
+
 impl Parser {
     pub fn new(tokens: &[Token]) -> Result<Self, FormulaError> {
         let parsed_expression = Self::expression(&mut tokens.iter().peekable(), 0)?;
@@ -93,7 +99,7 @@ impl Parser {
                 let op = match op {
                     LexerOperator::Plus => Operator::Pos,
                     LexerOperator::Minus => Operator::Neg,
-                    _ => return Err(ParserError(format!("unsupported unary operator: {}", op))),
+                    _ => error!("unsupported unary operator: {}", op),
                 };
                 let bp = Self::prefix_binding_power(&op);
 
@@ -102,13 +108,14 @@ impl Parser {
             }
             Some(Token::Bracket(LexerBracket::RoundOpen)) => {
                 result.extend(Self::expression(it, 0)?);
-                assert_eq!(
-                    it.next().unwrap(),
-                    &Token::Bracket(LexerBracket::RoundClose)
-                );
+                match it.next() {
+                    Some(Token::Bracket(LexerBracket::RoundClose)) => (),
+                    Some(x) => panic!("expected closing bracket, found: {}", x),
+                    None => error!("expected closing bracket, found end of expression"),
+                }
             }
-            Some(token) => return Err(ParserError(format!("unsupported start token: {}", token))),
-            None => return Err(ParserError("unexpected end of expression".to_owned())),
+            Some(token) => error!("unsupported start token: {}", token),
+            None => error!("unexpected end of expression"),
         };
 
         loop {
@@ -130,9 +137,7 @@ impl Parser {
                     result.extend(Self::expression(it, r_bp)?);
                     result.push(ParseItem::Operator(op));
                 }
-                Some(token) => {
-                    return Err(ParserError(format!("unsupported start token: {}", token)))
-                }
+                Some(token) => error!("unsupported start token: {}", token),
                 None => break,
             };
         }
@@ -162,7 +167,7 @@ impl Parser {
     fn function_operator(name: &String) -> Result<Operator, FormulaError> {
         match name.to_lowercase().as_str() {
             "sqrt" => Ok(Operator::Sqrt),
-            _ => Err(ParserError(format!("unsupported function: {}", name))),
+            _ => error!("unsupported function: {}", name),
         }
     }
 }
@@ -422,6 +427,13 @@ mod tests {
         fn arbitrary_expression(token_tree: TokenTree) {
             let parser = Parser::new(&token_tree.infix()).unwrap();
             assert_eq!(parser.postfix(), token_tree.postfix());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn tokenizer_does_not_crash(input in prop::collection::vec(any::<Token>(), 0..64)) {
+            let parser = Parser::new(&input);
         }
     }
 }
