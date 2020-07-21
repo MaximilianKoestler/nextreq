@@ -80,13 +80,10 @@ impl Parser {
             Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
             Some(Token::Identifier(name)) => {
                 if let Some(Token::Bracket(LexerBracket::RoundOpen)) = it.peek() {
-                    it.next();
-                    result.extend(Self::expression(it, 0)?);
-                    assert_eq!(
-                        it.next().unwrap(),
-                        &Token::Bracket(LexerBracket::RoundClose)
-                    );
                     let op = Self::function_operator(name)?;
+                    let bp = Self::function_binding_power();
+
+                    result.extend(Self::expression(it, bp)?);
                     result.push(ParseItem::Operator(op));
                 } else {
                     result.push(ParseItem::Value(Value::Variable(name.clone())))
@@ -141,6 +138,10 @@ impl Parser {
         }
 
         Ok(result)
+    }
+
+    fn function_binding_power() -> u8 {
+        7
     }
 
     fn prefix_binding_power(op: &Operator) -> u8 {
