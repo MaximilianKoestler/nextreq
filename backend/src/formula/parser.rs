@@ -79,6 +79,7 @@ impl Parser {
         match it.next() {
             Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
             Some(Token::Identifier(name)) => {
+                // TODO: function!
                 result.push(ParseItem::Value(Value::Variable(name.clone())))
             }
             Some(Token::Operator(op)) => {
@@ -358,6 +359,11 @@ mod tests {
     }
 
     proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 32,
+            max_shrink_iters: 20048,
+            .. ProptestConfig::default()
+        })]
         #[test]
         fn arbitrary_expression(token_tree: TokenTree) {
             let parser = Parser::new(&token_tree.infix()).unwrap();

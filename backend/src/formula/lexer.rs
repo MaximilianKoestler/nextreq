@@ -265,7 +265,7 @@ mod tests {
         fn tokenize_identifier(value in identifier_strategy(), spaces in whitespace_strategy()) {
             let lexer = Lexer::new(&format!("{}{}", value, spaces)).unwrap();
             let expected = vec![Token::Identifier(value)];
-            assert_eq!(&lexer[..], &expected[..]);
+            prop_assert_eq!(&lexer[..], &expected[..]);
         }
     }
 
