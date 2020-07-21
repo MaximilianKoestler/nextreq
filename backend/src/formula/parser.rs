@@ -95,7 +95,7 @@ macro_rules! error {
 impl Parser {
     pub fn new(tokens: &[Token]) -> Result<Self, FormulaError> {
         let mut it = tokens.iter().peekable();
-        let parsed_expression = Self::expression(&mut it, 0)?;
+        let parsed_expression = Self::expression(&mut it, 0, None)?;
 
         if it.next().is_some() {
             error!("unparsed tokens at end of expression");
@@ -104,7 +104,11 @@ impl Parser {
         Ok(Self { parsed_expression })
     }
 
-    fn expression(it: &mut PeekableToken, min_bp: u8) -> Result<Vec<ParseItem>, FormulaError> {
+    fn expression(
+        it: &mut PeekableToken,
+        min_bp: u8,
+        expected_terms: Option<u32>,
+    ) -> Result<Vec<ParseItem>, FormulaError> {
         let mut result = vec![];
 
         match it.next() {
@@ -114,7 +118,7 @@ impl Parser {
                     let (function, params) = Self::function_item(name)?;
                     let bp = Self::function_binding_power();
 
-                    result.extend(Self::expression(it, bp)?);
+                    result.extend(Self::expression(it, bp, Some(params))?);
                     result.push(ParseItem::Function(function, params));
                 } else {
                     result.push(ParseItem::Value(Value::Variable(name.clone())))
@@ -128,11 +132,11 @@ impl Parser {
                 };
                 let bp = Self::prefix_binding_power(&op);
 
-                result.extend(Self::expression(it, bp)?);
+                result.extend(Self::expression(it, bp, None)?);
                 result.push(ParseItem::Operator(op));
             }
             Some(Token::Bracket(LexerBracket::RoundOpen)) => {
-                result.extend(Self::expression(it, 0)?);
+                result.extend(Self::expression(it, 0, expected_terms)?);
                 match it.next() {
                     Some(Token::Bracket(LexerBracket::RoundClose)) => (),
                     Some(x) => panic!("expected closing bracket, found: {}", x),
@@ -143,17 +147,24 @@ impl Parser {
             None => error!("unexpected end of expression"),
         };
 
+        let mut terms = 1;
         loop {
             match it.peek() {
-                Some(Token::Bracket(LexerBracket::RoundClose)) => break,
+                Some(Token::Bracket(LexerBracket::RoundClose)) => match expected_terms {
+                    Some(expected) if terms != expected => {
+                        error!("expected {} terms, found {}", expected, terms)
+                    }
+                    _ => break,
+                },
                 Some(Token::Operator(LexerOperator::Comma)) => {
+                    terms += 1;
                     let (l_bp, r_bp) = Self::comma_binding_power();
                     if l_bp < min_bp {
                         break;
                     }
 
                     it.next();
-                    result.extend(Self::expression(it, r_bp)?);
+                    result.extend(Self::expression(it, r_bp, None)?);
                 }
                 Some(Token::Operator(op)) => {
                     let op = match op {
@@ -178,11 +189,11 @@ impl Parser {
                         }
 
                         it.next();
-                        result.extend(Self::expression(it, r_bp)?);
+                        result.extend(Self::expression(it, r_bp, None)?);
                     }
                     result.push(ParseItem::Operator(op));
                 }
-                Some(token) => error!("unsupported start token: {}", token),
+                Some(token) => error!("unsupported continuation token: {}", token),
                 None => break,
             };
         }
@@ -243,7 +254,7 @@ pub mod tests {
     use super::*;
     use itertools::Itertools;
     use proptest::prelude::*;
-    use std::iter::once;
+    use std::iter::{once, repeat};
 
     impl Parser {
         fn postfix(&self) -> String {
@@ -322,12 +333,27 @@ pub mod tests {
                 .into_iter()
                 .flatten()
                 .collect(),
-                TokenTree::Function(name, operands) => once(Token::Identifier(name.clone()))
-                    .chain(once(Token::Bracket(LexerBracket::RoundOpen)))
-                    .chain(operands.iter().flat_map(TokenTree::infix))
-                    .chain(once(Token::Bracket(LexerBracket::RoundClose)))
-                    .collect(),
+                TokenTree::Function(name, operands) => {
+                    let commas: Vec<_> = repeat(vec![Token::Operator(LexerOperator::Comma)])
+                        .take(operands.len() - 1)
+                        .collect();
+                    let expanded_operands: Vec<_> = operands.iter().map(TokenTree::infix).collect();
+                    let separated_operands: Vec<_> = expanded_operands
+                        .into_iter()
+                        .interleave(commas.into_iter())
+                        .collect();
+
+                    once(Token::Identifier(name.clone()))
+                        .chain(once(Token::Bracket(LexerBracket::RoundOpen)))
+                        .chain(separated_operands.into_iter().flatten())
+                        .chain(once(Token::Bracket(LexerBracket::RoundClose)))
+                        .collect()
+                }
             }
+        }
+
+        pub fn infix_str(&self) -> String {
+            self.infix().iter().map(Token::to_string).join("")
         }
 
         pub fn variables(self) -> Vec<String> {
@@ -368,8 +394,12 @@ pub mod tests {
         prop_oneof![Just(LexerOperator::ExclamationMark),].boxed()
     }
 
-    fn unary_function() -> BoxedStrategy<String> {
-        prop_oneof![Just("sqrt".to_owned()),].boxed()
+    fn function() -> BoxedStrategy<(String, usize)> {
+        prop_oneof![
+            Just(("sqrt".to_owned(), 1)),
+            // Just(("round".to_owned(), 2)),
+        ]
+        .boxed()
     }
 
     prop_compose! {
@@ -402,10 +432,10 @@ pub mod tests {
     }
 
     prop_compose! {
-        fn unary_function_expression(base: BoxedStrategy<TokenTree>)
-                          (name in unary_function(),
-                                operands in prop::collection::vec(base, 1))
-                          -> TokenTree {
+        fn function_expression(base: BoxedStrategy<TokenTree>)
+                (base in Just(base), (name, params) in function())
+                (name in Just(name), operands in prop::collection::vec(base, params))
+                -> TokenTree {
            TokenTree::Function(name, operands)
        }
     }
@@ -420,12 +450,12 @@ pub mod tests {
                 r"[[:lower:]]{1}".prop_map(TokenTree::Variable),
             ];
 
-            leaf.prop_recursive(32, 1024, 2, |inner| {
+            leaf.prop_recursive(16, 512, 2, |inner| {
                 prop_oneof![
                     unary_prefix_expression(inner.clone()),
                     unary_postfix_expression(inner.clone()),
                     binary_infix_expression(inner.clone()),
-                    unary_function_expression(inner.clone()),
+                    function_expression(inner.clone()),
                 ]
             })
             .boxed()
@@ -572,6 +602,17 @@ pub mod tests {
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 sqrt"));
+
+        let parser = Parser::new(&vec![
+            Token::Identifier("sqrt".to_owned()),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.0),
+            Token::Operator(LexerOperator::Plus),
+            Token::Number(2.0),
+            Token::Bracket(LexerBracket::RoundClose),
+        ])
+        .unwrap();
+        assert_eq!(parser.postfix(), format!("1 2 + sqrt"));
     }
 
     #[test]
@@ -587,21 +628,41 @@ pub mod tests {
         .unwrap();
         assert_eq!(parser.postfix(), format!("1.5 2 round"));
 
-        // let parser = Parser::new(&vec![
-        //     Token::Identifier("round".to_owned()),
-        //     Token::Bracket(LexerBracket::RoundOpen),
-        //     Token::Number(1.5),
-        //     Token::Operator(LexerOperator::Comma),
-        //     Token::Number(2.0),
-        //     Token::Operator(LexerOperator::Comma),
-        //     Token::Number(3.0),
-        //     Token::Bracket(LexerBracket::RoundClose),
-        // ]);
-        // assert!(parser.is_err());
+        // TODO - known issues:
+        // round((1), (2))
+    }
 
-        // TODO:
-        // - test more parameters
-        // - too few/many parameters causes error
+    #[test]
+    fn parse_wrong_parameter_number() {
+        assert!(Parser::new(&vec![
+            Token::Identifier("sqrt".to_owned()),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.0),
+            Token::Operator(LexerOperator::Comma),
+            Token::Number(2.0),
+            Token::Bracket(LexerBracket::RoundClose),
+        ])
+        .is_err());
+
+        assert!(Parser::new(&vec![
+            Token::Identifier("round".to_owned()),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.0),
+            Token::Operator(LexerOperator::Comma),
+            Token::Number(2.0),
+            Token::Operator(LexerOperator::Comma),
+            Token::Number(3.0),
+            Token::Bracket(LexerBracket::RoundClose),
+        ])
+        .is_err());
+
+        assert!(Parser::new(&vec![
+            Token::Identifier("round".to_owned()),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.0),
+            Token::Bracket(LexerBracket::RoundClose),
+        ])
+        .is_err());
     }
 
     proptest! {
@@ -611,8 +672,11 @@ pub mod tests {
         })]
         #[test]
         fn arbitrary_expression(token_tree: TokenTree) {
-            let parser = Parser::new(&token_tree.infix()).unwrap();
-            assert_eq!(parser.postfix(), token_tree.postfix());
+            let parser = Parser::new(&token_tree.infix());
+            if parser.is_err() {
+                println!("{}", token_tree.infix_str());
+            }
+            prop_assert_eq!(parser.unwrap().postfix(), token_tree.postfix());
         }
     }
 

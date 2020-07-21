@@ -218,7 +218,7 @@ mod tests {
         })]
         #[test]
         fn evaluate_arbitrary_expression(token_tree: parser::tests::TokenTree) {
-            let infix_str = token_tree.infix().iter().map(lexer::Token::to_string).join("");
+            let infix_str = token_tree.infix_str();
 
             let mut vars = VariableDict::new();
             for var in token_tree.variables() {
