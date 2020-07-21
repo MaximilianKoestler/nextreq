@@ -264,7 +264,7 @@ mod tests {
     }
 
     #[test]
-    fn tokenize_invalid() {
+    fn parse_invalid() {
         assert!(Parser::new(&vec![Token::Operator(LexerOperator::Plus)]).is_err());
     }
 
