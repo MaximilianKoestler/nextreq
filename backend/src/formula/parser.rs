@@ -29,8 +29,6 @@ pub enum Operator {
     Pos,
     Neg,
     Fac,
-    Sqrt,
-    Round,
 }
 
 impl fmt::Display for Operator {
@@ -44,6 +42,20 @@ impl fmt::Display for Operator {
             Self::Pos => "⊕",
             Self::Neg => "⊖",
             Self::Fac => "!",
+        };
+        write!(f, "{}", op)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Function {
+    Sqrt,
+    Round,
+}
+
+impl fmt::Display for Function {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let op = match self {
             Self::Sqrt => "sqrt",
             Self::Round => "round",
         };
@@ -55,13 +67,15 @@ impl fmt::Display for Operator {
 pub enum ParseItem {
     Value(Value),
     Operator(Operator),
+    Function(Function, u32),
 }
 
 impl fmt::Display for ParseItem {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Value(v) => write!(f, "{}", v),
-            Self::Operator(o) => write!(f, "{}", o),
+            Self::Value(x) => write!(f, "{}", x),
+            Self::Operator(x) => write!(f, "{}", x),
+            Self::Function(x, _) => write!(f, "{}", x),
         }
     }
 }
@@ -97,11 +111,11 @@ impl Parser {
             Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
             Some(Token::Identifier(name)) => {
                 if let Some(Token::Bracket(LexerBracket::RoundOpen)) = it.peek() {
-                    let op = Self::function_operator(name)?;
+                    let (function, params) = Self::function_item(name)?;
                     let bp = Self::function_binding_power();
 
                     result.extend(Self::expression(it, bp)?);
-                    result.push(ParseItem::Operator(op));
+                    result.push(ParseItem::Function(function, params));
                 } else {
                     result.push(ParseItem::Value(Value::Variable(name.clone())))
                 }
@@ -207,12 +221,12 @@ impl Parser {
         }
     }
 
-    fn function_operator(name: &String) -> Result<Operator, FormulaError> {
-        match name.to_lowercase().as_str() {
-            "sqrt" => Ok(Operator::Sqrt),
-            "round" => Ok(Operator::Round),
+    fn function_item(name: &String) -> Result<(Function, u32), FormulaError> {
+        Ok(match name.to_lowercase().as_str() {
+            "sqrt" => (Function::Sqrt, 1),
+            "round" => (Function::Round, 2),
             _ => error!("unsupported function: {}", name),
-        }
+        })
     }
 }
 
@@ -572,6 +586,18 @@ pub mod tests {
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!("1.5 2 round"));
+
+        // let parser = Parser::new(&vec![
+        //     Token::Identifier("round".to_owned()),
+        //     Token::Bracket(LexerBracket::RoundOpen),
+        //     Token::Number(1.5),
+        //     Token::Operator(LexerOperator::Comma),
+        //     Token::Number(2.0),
+        //     Token::Operator(LexerOperator::Comma),
+        //     Token::Number(3.0),
+        //     Token::Bracket(LexerBracket::RoundClose),
+        // ]);
+        // assert!(parser.is_err());
 
         // TODO:
         // - test more parameters

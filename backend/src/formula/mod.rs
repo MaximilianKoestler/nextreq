@@ -100,11 +100,13 @@ impl Formula {
                             _ => (1..=(lhs as u32)).fold(1.0, |a, b| a * b as f64),
                         });
                     }
-                    parser::Operator::Sqrt => {
+                },
+                parser::ParseItem::Function(f, _) => match f {
+                    parser::Function::Sqrt => {
                         let rhs = take!(stack);
                         stack.push(rhs.sqrt());
                     }
-                    parser::Operator::Round => {
+                    parser::Function::Round => {
                         todo!();
                     }
                 },
