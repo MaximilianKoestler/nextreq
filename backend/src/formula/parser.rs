@@ -25,6 +25,7 @@ pub enum Operator {
     Sub,
     Mul,
     Div,
+    Pow,
     Pos,
     Neg,
     Sqrt,
@@ -37,6 +38,7 @@ impl fmt::Display for Operator {
             Self::Sub => "-",
             Self::Mul => "*",
             Self::Div => "/",
+            Self::Pow => "^",
             Self::Pos => "⊕",
             Self::Neg => "⊖",
             Self::Sqrt => "sqrt",
@@ -132,6 +134,7 @@ impl Parser {
                         LexerOperator::Minus => Operator::Sub,
                         LexerOperator::Star => Operator::Mul,
                         LexerOperator::Slash => Operator::Div,
+                        LexerOperator::Caret => Operator::Pow,
                     };
                     let (l_bp, r_bp) = Self::infix_binding_power(&op);
                     if l_bp < min_bp {
@@ -156,7 +159,7 @@ impl Parser {
 
     fn prefix_binding_power(op: &Operator) -> u8 {
         match op {
-            Operator::Pos | Operator::Neg => 5,
+            Operator::Pos | Operator::Neg => 7,
             _ => panic!("unsupported unary operator: {}", op),
         }
     }
@@ -165,6 +168,7 @@ impl Parser {
         match op {
             Operator::Add | Operator::Sub => (1, 2),
             Operator::Mul | Operator::Div => (3, 4),
+            Operator::Pow => (5, 6),
             _ => panic!("unsupported binary operator: {}", op),
         }
     }

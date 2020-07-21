@@ -81,6 +81,11 @@ impl Formula {
                         let lhs = take!(stack);
                         stack.push(lhs / rhs);
                     }
+                    parser::Operator::Pow => {
+                        let rhs = take!(stack);
+                        let lhs = take!(stack);
+                        stack.push(lhs.powf(rhs));
+                    }
                     parser::Operator::Pos => {}
                     parser::Operator::Neg => {
                         let rhs = take!(stack);
@@ -137,6 +142,13 @@ mod tests {
         let formula = Formula::new("1 / 2").unwrap();
         let result = formula.eval().unwrap();
         assert_eq!(result, 0.5)
+    }
+
+    #[test]
+    fn evaluate_power() {
+        let formula = Formula::new("2 ^ 2").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, 4.0)
     }
 
     #[test]
