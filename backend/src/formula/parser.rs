@@ -253,6 +253,23 @@ pub mod tests {
                     .collect(),
             }
         }
+
+        pub fn variables(self) -> Vec<String> {
+            match self {
+                TokenTree::Number(_) => vec![],
+                TokenTree::Variable(name) => vec![name],
+                TokenTree::Expression(_, operands) => operands
+                    .into_iter()
+                    .map(TokenTree::variables)
+                    .flatten()
+                    .collect(),
+                TokenTree::Function(_, operands) => operands
+                    .into_iter()
+                    .map(TokenTree::variables)
+                    .flatten()
+                    .collect(),
+            }
+        }
     }
 
     fn unary_operator() -> BoxedStrategy<LexerOperator> {

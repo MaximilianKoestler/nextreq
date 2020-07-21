@@ -2,6 +2,8 @@ pub mod error;
 pub mod lexer;
 pub mod parser;
 
+use std::collections::HashMap;
+
 use error::FormulaError;
 
 pub struct Formula {
@@ -16,6 +18,22 @@ macro_rules! take {
     };
 }
 
+macro_rules! var {
+    ($vars:ident, $name:ident) => {
+        ($vars)
+            .as_ref()
+            .map(|m| m.get($name))
+            .flatten()
+            .ok_or(FormulaError::EvaluationError(format!(
+                "variable {} not found",
+                $name
+            )))?
+            .clone();
+    };
+}
+
+type VariableDict = HashMap<String, f64>;
+
 impl Formula {
     pub fn new(input: &str) -> Result<Self, FormulaError> {
         let lexer = lexer::Lexer::new(input)?;
@@ -24,12 +42,23 @@ impl Formula {
     }
 
     pub fn eval(&self) -> Result<f64, FormulaError> {
+        self.eval_internal(None)
+    }
+
+    pub fn eval_with(&self, vars: &VariableDict) -> Result<f64, FormulaError> {
+        self.eval_internal(Some(vars))
+    }
+
+    fn eval_internal(&self, vars: Option<&VariableDict>) -> Result<f64, FormulaError> {
         let mut stack: Vec<f64> = vec![];
         for item in self.parser.iter() {
             match item {
                 parser::ParseItem::Value(v) => match v {
                     parser::Value::Number(value) => stack.push(*value),
-                    parser::Value::Variable(name) => stack.push(0.0),
+                    parser::Value::Variable(name) => {
+                        let var = var!(vars, name);
+                        stack.push(var);
+                    }
                 },
                 parser::ParseItem::Operator(op) => match op {
                     parser::Operator::Add => {
@@ -138,6 +167,17 @@ mod tests {
         assert_eq!(result, 4.0)
     }
 
+    #[test]
+    fn evaluate_var() {
+        let vars: HashMap<String, f64> = [("a", 1.0), ("b", 2.0), ("c", 3.0)]
+            .iter()
+            .map(|(k, v)| (k.to_owned().to_owned(), *v))
+            .collect();
+        let formula = Formula::new("a + b * c").unwrap();
+        let result = formula.eval_with(&vars).unwrap();
+        assert_eq!(result, 7.0)
+    }
+
     proptest! {
         #![proptest_config(ProptestConfig {
             max_shrink_iters: 2048,
@@ -146,8 +186,14 @@ mod tests {
         #[test]
         fn evaluate_arbitrary_expression(token_tree: parser::tests::TokenTree) {
             let infix_str = token_tree.infix().iter().map(lexer::Token::to_string).join("");
+
+            let mut vars = VariableDict::new();
+            for var in token_tree.variables() {
+                vars.insert(var, 0.0);
+            }
+
             let formula = Formula::new(&infix_str).unwrap();
-            formula.eval().unwrap();
+            formula.eval_with(&vars).unwrap();
         }
     }
 }
