@@ -132,6 +132,15 @@ impl Parser {
         loop {
             match it.peek() {
                 Some(Token::Bracket(LexerBracket::RoundClose)) => break,
+                Some(Token::Operator(LexerOperator::Comma)) => {
+                    let (l_bp, r_bp) = Self::comma_binding_power();
+                    if l_bp < min_bp {
+                        break;
+                    }
+
+                    it.next();
+                    result.extend(Self::expression(it, r_bp)?);
+                }
                 Some(Token::Operator(op)) => {
                     let op = match op {
                         LexerOperator::Plus => Operator::Add,
@@ -140,7 +149,7 @@ impl Parser {
                         LexerOperator::Slash => Operator::Div,
                         LexerOperator::Caret => Operator::Pow,
                         LexerOperator::ExclamationMark => Operator::Fac,
-                        LexerOperator::Comma => error!("not yet implemented"),
+                        LexerOperator::Comma => panic!("unreachable code"),
                     };
 
                     if let Some(l_bp) = Self::postfix_binding_power(&op) {
@@ -171,25 +180,29 @@ impl Parser {
         255
     }
 
+    fn comma_binding_power() -> (u8, u8) {
+        (1, 2)
+    }
+
     fn prefix_binding_power(op: &Operator) -> u8 {
         match op {
-            Operator::Pos | Operator::Neg => 7,
+            Operator::Pos | Operator::Neg => 9,
             _ => panic!("unsupported unary operator: {}", op),
         }
     }
 
     fn infix_binding_power(op: &Operator) -> (u8, u8) {
         match op {
-            Operator::Add | Operator::Sub => (1, 2),
-            Operator::Mul | Operator::Div => (3, 4),
-            Operator::Pow => (5, 6),
+            Operator::Add | Operator::Sub => (3, 4),
+            Operator::Mul | Operator::Div => (5, 6),
+            Operator::Pow => (7, 8),
             _ => panic!("unsupported binary operator: {}", op),
         }
     }
 
     fn postfix_binding_power(op: &Operator) -> Option<u8> {
         match op {
-            Operator::Fac => Some(9),
+            Operator::Fac => Some(11),
             _ => None,
         }
     }
@@ -549,16 +562,20 @@ pub mod tests {
 
     #[test]
     fn parse_multi_parameter_function() {
-        // let parser = Parser::new(&vec![
-        //     Token::Identifier("round".to_owned()),
-        //     Token::Bracket(LexerBracket::RoundOpen),
-        //     Token::Number(1.5),
-        //     Token::Operator(LexerOperator::Comma),
-        //     Token::Number(2.0),
-        //     Token::Bracket(LexerBracket::RoundClose),
-        // ])
-        // .unwrap();
-        // assert_eq!(parser.postfix(), format!("1.5 2 round"));
+        let parser = Parser::new(&vec![
+            Token::Identifier("round".to_owned()),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.5),
+            Token::Operator(LexerOperator::Comma),
+            Token::Number(2.0),
+            Token::Bracket(LexerBracket::RoundClose),
+        ])
+        .unwrap();
+        assert_eq!(parser.postfix(), format!("1.5 2 round"));
+
+        // TODO:
+        // - test more parameters
+        // - too few/many parameters causes error
     }
 
     proptest! {
