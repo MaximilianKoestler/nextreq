@@ -4,6 +4,7 @@ use std::fmt;
 pub enum FormulaError {
     LexerError(String),
     ParserError(String),
+    EvaluationError(String),
 }
 
 impl fmt::Display for FormulaError {
@@ -11,6 +12,7 @@ impl fmt::Display for FormulaError {
         match self {
             FormulaError::LexerError(msg) => write!(f, "Lexing Error: {}", msg),
             FormulaError::ParserError(msg) => write!(f, "Parsing Error: {}", msg),
+            FormulaError::EvaluationError(msg) => write!(f, "Evaluation Error: {}", msg),
         }
     }
 }

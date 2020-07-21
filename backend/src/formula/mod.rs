@@ -8,6 +8,14 @@ pub struct Formula {
     parser: parser::Parser,
 }
 
+macro_rules! take {
+    ($stack:ident) => {
+        ($stack).pop().ok_or(FormulaError::EvaluationError(
+            "expected value, found empty stack".to_owned(),
+        ))?;
+    };
+}
+
 impl Formula {
     pub fn new(input: &str) -> Result<Self, FormulaError> {
         let lexer = lexer::Lexer::new(input)?;
@@ -15,7 +23,7 @@ impl Formula {
         Ok(Self { parser })
     }
 
-    pub fn eval(&self) -> f64 {
+    pub fn eval(&self) -> Result<f64, FormulaError> {
         let mut stack: Vec<f64> = vec![];
         for item in self.parser.iter() {
             match item {
@@ -25,33 +33,46 @@ impl Formula {
                 },
                 parser::ParseItem::Operator(op) => match op {
                     parser::Operator::Add => {
-                        let lhs = stack.pop().unwrap();
-                        let rhs = stack.pop().unwrap();
+                        let rhs = take!(stack);
+                        let lhs = take!(stack);
                         stack.push(lhs + rhs);
                     }
                     parser::Operator::Sub => {
-                        let lhs = stack.pop().unwrap();
-                        let rhs = stack.pop().unwrap();
-                        stack.push(0.0);
+                        let rhs = take!(stack);
+                        let lhs = take!(stack);
+                        stack.push(lhs - rhs);
                     }
                     parser::Operator::Mul => {
-                        let lhs = stack.pop().unwrap();
-                        let rhs = stack.pop().unwrap();
-                        stack.push(0.0);
+                        let rhs = take!(stack);
+                        let lhs = take!(stack);
+                        stack.push(lhs * rhs);
                     }
                     parser::Operator::Div => {
-                        let lhs = stack.pop().unwrap();
-                        let rhs = stack.pop().unwrap();
-                        stack.push(0.0);
+                        let rhs = take!(stack);
+                        let lhs = take!(stack);
+                        stack.push(lhs / rhs);
                     }
                     parser::Operator::Pos => {}
-                    parser::Operator::Neg => {}
-                    parser::Operator::Sqrt => {}
+                    parser::Operator::Neg => {
+                        let rhs = take!(stack);
+                        stack.push(-rhs);
+                    }
+                    parser::Operator::Sqrt => {
+                        let rhs = take!(stack);
+                        stack.push(rhs.sqrt());
+                    }
                 },
             }
         }
-        assert_eq!(stack.len(), 1);
-        return stack.pop().unwrap();
+
+        if stack.len() != 1 {
+            Err(FormulaError::EvaluationError(format!(
+                "expected exactly one item, found {}",
+                stack.len()
+            )))
+        } else {
+            Ok(stack.pop().unwrap())
+        }
     }
 }
 
@@ -62,10 +83,59 @@ mod tests {
     use proptest::prelude::*;
 
     #[test]
-    fn evaluate_simple_addition() {
-        let formula = Formula::new("1 + 1").unwrap();
-        let result = formula.eval();
+    fn evaluate_addition() {
+        let formula = Formula::new("1 + 2").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, 3.0)
+    }
+
+    #[test]
+    fn evaluate_subtraction() {
+        let formula = Formula::new("1 - 2").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, -1.0)
+    }
+
+    #[test]
+    fn evaluate_multiplication() {
+        let formula = Formula::new("1 * 2").unwrap();
+        let result = formula.eval().unwrap();
         assert_eq!(result, 2.0)
+    }
+
+    #[test]
+    fn evaluate_division() {
+        let formula = Formula::new("1 / 2").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, 0.5)
+    }
+
+    #[test]
+    fn evaluate_non_negation() {
+        let formula = Formula::new("+ 1").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, 1.0)
+    }
+
+    #[test]
+    fn evaluate_negation() {
+        let formula = Formula::new("- 1").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, -1.0)
+    }
+
+    #[test]
+    fn evaluate_sqrt() {
+        let formula = Formula::new("sqrt (4)").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, 2.0)
+    }
+
+    #[test]
+    fn evaluate_complex_expression() {
+        let formula = Formula::new("sqrt(3*3 + (6/3+2)*4) - 1").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, 4.0)
     }
 
     proptest! {
@@ -77,7 +147,7 @@ mod tests {
         fn evaluate_arbitrary_expression(token_tree: parser::tests::TokenTree) {
             let infix_str = token_tree.infix().iter().map(lexer::Token::to_string).join("");
             let formula = Formula::new(&infix_str).unwrap();
-            formula.eval();
+            formula.eval().unwrap();
         }
     }
 }
