@@ -138,6 +138,7 @@ impl Parser {
                         LexerOperator::Slash => Operator::Div,
                         LexerOperator::Caret => Operator::Pow,
                         LexerOperator::ExclamationMark => Operator::Fac,
+                        LexerOperator::Comma => error!("not yet implemented"),
                     };
 
                     if let Some(l_bp) = Self::postfix_binding_power(&op) {

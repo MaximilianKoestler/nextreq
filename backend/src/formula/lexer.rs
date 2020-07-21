@@ -12,6 +12,7 @@ pub enum Operator {
     Slash,
     Caret,
     ExclamationMark,
+    Comma,
 }
 
 impl fmt::Display for Operator {
@@ -23,6 +24,7 @@ impl fmt::Display for Operator {
             Self::Slash => "/",
             Self::Caret => "^",
             Self::ExclamationMark => "!",
+            Self::Comma => ",",
         };
         write!(f, "{}", op)
     }
@@ -135,6 +137,9 @@ impl Lexer {
                 '!' => {
                     tokens.push(Token::Operator(Operator::ExclamationMark));
                 }
+                ',' => {
+                    tokens.push(Token::Operator(Operator::Comma));
+                }
                 '(' => {
                     tokens.push(Token::Bracket(Bracket::RoundOpen));
                 }
@@ -199,6 +204,7 @@ mod tests {
                 Just(Self::Slash),
                 Just(Self::Caret),
                 Just(Self::ExclamationMark),
+                Just(Self::Comma),
             ]
             .boxed()
         }
@@ -318,7 +324,7 @@ mod tests {
 
     #[test]
     fn tokenize_complex_expression() {
-        let lexer = Lexer::new("0+ fn3(1.5 + 10* -200)/3^你好!").unwrap();
+        let lexer = Lexer::new("0+ fn3(1.5 + 10* -200, 5)/3^你好!").unwrap();
         let expected = vec![
             Token::Number(0.0),
             Token::Operator(Operator::Plus),
@@ -330,6 +336,8 @@ mod tests {
             Token::Operator(Operator::Star),
             Token::Operator(Operator::Minus),
             Token::Number(200.0),
+            Token::Operator(Operator::Comma),
+            Token::Number(5.0),
             Token::Bracket(Bracket::RoundClose),
             Token::Operator(Operator::Slash),
             Token::Number(3.0),
