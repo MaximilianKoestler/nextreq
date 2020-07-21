@@ -74,7 +74,12 @@ macro_rules! error {
 
 impl Parser {
     pub fn new(tokens: &[Token]) -> Result<Self, FormulaError> {
-        let parsed_expression = Self::expression(&mut tokens.iter().peekable(), 0)?;
+        let mut it = tokens.iter().peekable();
+        let parsed_expression = Self::expression(&mut it, 0)?;
+
+        if it.next().is_some() {
+            error!("unparsed tokens at end of expression");
+        }
 
         Ok(Self { parsed_expression })
     }
@@ -331,6 +336,11 @@ pub mod tests {
     #[test]
     fn parse_invalid() {
         assert!(Parser::new(&vec![Token::Operator(LexerOperator::Plus)]).is_err());
+        assert!(Parser::new(&vec![
+            Token::Number(1.0),
+            Token::Bracket(LexerBracket::RoundClose)
+        ])
+        .is_err());
     }
 
     proptest! {
