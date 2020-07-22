@@ -1,0 +1,27 @@
+name: Rust build and test
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Build
+        run: cargo build
+      - name: Run tests
+        run: cargo test
+      - name: Check format
+        run: cargo fmt --all -- --check
