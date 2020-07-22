@@ -84,18 +84,32 @@ pub struct Parser {
     parsed_expression: Vec<ParseItem>,
 }
 
-type PeekableToken<'a> = std::iter::Peekable<std::slice::Iter<'a, Token>>;
-
 macro_rules! error {
     ($($arg:tt)*) => {{
         return Err(FormulaError::ParserError(format!($($arg)*)))
     }}
 }
 
+type PeekableToken<'a> = std::iter::Peekable<std::slice::Iter<'a, Token>>;
+
+enum TermExpectation {
+    Unlimited,
+    Exact(u32, u32),
+}
+
+impl TermExpectation {
+    fn countdown(&self) -> Self {
+        match self {
+            Self::Unlimited | Self::Exact(_, 0) => Self::Unlimited,
+            Self::Exact(expected, countdown) => Self::Exact(*expected, countdown - 1),
+        }
+    }
+}
+
 impl Parser {
     pub fn new(tokens: &[Token]) -> Result<Self, FormulaError> {
         let mut it = tokens.iter().peekable();
-        let parsed_expression = Self::expression(&mut it, 0, None)?;
+        let parsed_expression = Self::expression(&mut it, 0, TermExpectation::Unlimited)?;
 
         if it.next().is_some() {
             error!("unparsed tokens at end of expression");
@@ -107,7 +121,7 @@ impl Parser {
     fn expression(
         it: &mut PeekableToken,
         min_bp: u8,
-        expected_terms: Option<u32>,
+        limit: TermExpectation,
     ) -> Result<Vec<ParseItem>, FormulaError> {
         let mut result = vec![];
 
@@ -118,7 +132,7 @@ impl Parser {
                     let (function, params) = Self::function_item(name)?;
                     let bp = Self::function_binding_power();
 
-                    result.extend(Self::expression(it, bp, Some(params))?);
+                    result.extend(Self::expression(it, bp, TermExpectation::Exact(params, 1))?);
                     result.push(ParseItem::Function(function, params));
                 } else {
                     result.push(ParseItem::Value(Value::Variable(name.clone())))
@@ -132,11 +146,11 @@ impl Parser {
                 };
                 let bp = Self::prefix_binding_power(&op);
 
-                result.extend(Self::expression(it, bp, None)?);
+                result.extend(Self::expression(it, bp, TermExpectation::Unlimited)?);
                 result.push(ParseItem::Operator(op));
             }
             Some(Token::Bracket(LexerBracket::RoundOpen)) => {
-                result.extend(Self::expression(it, 0, expected_terms)?);
+                result.extend(Self::expression(it, 0, limit.countdown())?);
                 match it.next() {
                     Some(Token::Bracket(LexerBracket::RoundClose)) => (),
                     Some(x) => panic!("expected closing bracket, found: {}", x),
@@ -150,8 +164,8 @@ impl Parser {
         let mut terms = 1;
         loop {
             match it.peek() {
-                Some(Token::Bracket(LexerBracket::RoundClose)) => match expected_terms {
-                    Some(expected) if terms != expected => {
+                Some(Token::Bracket(LexerBracket::RoundClose)) => match limit {
+                    TermExpectation::Exact(expected, 0) if terms != expected => {
                         error!("expected {} terms, found {}", expected, terms)
                     }
                     _ => break,
@@ -164,7 +178,7 @@ impl Parser {
                     }
 
                     it.next();
-                    result.extend(Self::expression(it, r_bp, None)?);
+                    result.extend(Self::expression(it, r_bp, TermExpectation::Unlimited)?);
                 }
                 Some(Token::Operator(op)) => {
                     let op = match op {
@@ -189,7 +203,7 @@ impl Parser {
                         }
 
                         it.next();
-                        result.extend(Self::expression(it, r_bp, None)?);
+                        result.extend(Self::expression(it, r_bp, TermExpectation::Unlimited)?);
                     }
                     result.push(ParseItem::Operator(op));
                 }
@@ -395,11 +409,7 @@ pub mod tests {
     }
 
     fn function() -> BoxedStrategy<(String, usize)> {
-        prop_oneof![
-            Just(("sqrt".to_owned(), 1)),
-            // Just(("round".to_owned(), 2)),
-        ]
-        .boxed()
+        prop_oneof![Just(("sqrt".to_owned(), 1)), Just(("round".to_owned(), 2)),].boxed()
     }
 
     prop_compose! {
@@ -628,8 +638,18 @@ pub mod tests {
         .unwrap();
         assert_eq!(parser.postfix(), format!("1.5 2 round"));
 
-        // TODO - known issues:
-        // round((1), (2))
+        let parser = Parser::new(&vec![
+            Token::Identifier("round".to_owned()),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.5),
+            Token::Bracket(LexerBracket::RoundClose),
+            Token::Operator(LexerOperator::Comma),
+            Token::Number(2.0),
+            Token::Bracket(LexerBracket::RoundClose),
+        ])
+        .unwrap();
+        assert_eq!(parser.postfix(), format!("1.5 2 round"));
     }
 
     #[test]
