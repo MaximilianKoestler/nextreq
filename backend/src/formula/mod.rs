@@ -135,78 +135,70 @@ mod tests {
     #[test]
     fn evaluate_addition() {
         let formula = Formula::new("1 + 2").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, 3.0)
+        assert_eq!(formula.eval().unwrap(), 3.0)
     }
 
     #[test]
     fn evaluate_subtraction() {
         let formula = Formula::new("1 - 2").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, -1.0)
+        assert_eq!(formula.eval().unwrap(), -1.0)
     }
 
     #[test]
     fn evaluate_multiplication() {
         let formula = Formula::new("1 * 2").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, 2.0)
+        assert_eq!(formula.eval().unwrap(), 2.0)
     }
 
     #[test]
     fn evaluate_division() {
         let formula = Formula::new("1 / 2").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, 0.5)
+        assert_eq!(formula.eval().unwrap(), 0.5)
     }
 
     #[test]
     fn evaluate_power() {
         let formula = Formula::new("2 ^ 2").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, 4.0)
+        assert_eq!(formula.eval().unwrap(), 4.0)
     }
 
     #[test]
     fn evaluate_non_negation() {
         let formula = Formula::new("+ 1").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, 1.0)
+        assert_eq!(formula.eval().unwrap(), 1.0)
     }
 
     #[test]
     fn evaluate_negation() {
         let formula = Formula::new("- 1").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, -1.0)
+        assert_eq!(formula.eval().unwrap(), -1.0)
     }
 
     #[test]
     fn evaluate_factorial() {
         let formula = Formula::new("3 !").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, 6.0)
+        assert_eq!(formula.eval().unwrap(), 6.0)
     }
 
     #[test]
     fn evaluate_sqrt() {
         let formula = Formula::new("sqrt(4)").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, 2.0)
+        assert_eq!(formula.eval().unwrap(), 2.0)
     }
 
     #[test]
     fn evaluate_round() {
         let formula = Formula::new("round(1.0001, 2)").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, 1.0)
+        assert_eq!(formula.eval().unwrap(), 1.0);
+
+        let formula = Formula::new("round(3.141592, 4)").unwrap();
+        assert_eq!(formula.eval().unwrap(), 3.1416);
     }
 
     #[test]
     fn evaluate_complex_expression() {
         let formula = Formula::new("sqrt(3*3 + (6/3+2)*4) - 1").unwrap();
-        let result = formula.eval().unwrap();
-        assert_eq!(result, 4.0)
+        assert_eq!(formula.eval().unwrap(), 4.0)
     }
 
     #[test]
