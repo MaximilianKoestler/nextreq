@@ -103,11 +103,14 @@ impl Formula {
                 },
                 parser::ParseItem::Function(f, _) => match f {
                     parser::Function::Sqrt => {
-                        let rhs = take!(stack);
-                        stack.push(rhs.sqrt());
+                        let param = take!(stack);
+                        stack.push(param.sqrt());
                     }
                     parser::Function::Round => {
-                        todo!();
+                        let precision = take!(stack);
+                        let value = take!(stack);
+                        let factor = 10f64.powf(precision.trunc());
+                        stack.push((value * factor).round() / factor);
                     }
                 },
             }
@@ -187,9 +190,16 @@ mod tests {
 
     #[test]
     fn evaluate_sqrt() {
-        let formula = Formula::new("sqrt (4)").unwrap();
+        let formula = Formula::new("sqrt(4)").unwrap();
         let result = formula.eval().unwrap();
         assert_eq!(result, 2.0)
+    }
+
+    #[test]
+    fn evaluate_round() {
+        let formula = Formula::new("round(1.0001, 2)").unwrap();
+        let result = formula.eval().unwrap();
+        assert_eq!(result, 1.0)
     }
 
     #[test]
@@ -212,7 +222,7 @@ mod tests {
 
     proptest! {
         #![proptest_config(ProptestConfig {
-            max_shrink_iters: 4096,
+            max_shrink_iters: 2048,
             .. ProptestConfig::default()
         })]
         #[test]

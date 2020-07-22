@@ -503,7 +503,7 @@ pub mod tests {
                 r"[[:lower:]]{1}".prop_map(TokenTree::Variable),
             ];
 
-            leaf.prop_recursive(16, 512, 2, |inner| {
+            leaf.prop_recursive(8, 512, 2, |inner| {
                 prop_oneof![
                     unary_prefix_expression(inner.clone()),
                     unary_postfix_expression(inner.clone()),
