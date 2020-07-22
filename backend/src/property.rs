@@ -22,6 +22,8 @@ pub trait Property {
     fn unit(&self) -> Option<&str>;
 }
 
+type PropBox = Box<dyn Property>;
+
 struct ValueProperty {
     value: f64,
     unit: Option<String>,
@@ -71,14 +73,14 @@ impl Property for FormulaProperty {
 }
 
 pub enum Match {
-    Equal(f64),
-    Range(f64, f64),
+    Equal(PropBox),
+    Range(PropBox, PropBox),
     Any,
 }
 
 pub struct TableProperty {
-    input: Box<dyn Property>,
-    matches: Vec<(Match, Box<dyn Property>)>,
+    input: PropBox,
+    matches: Vec<(Match, PropBox)>,
 }
 
 impl TableProperty {
@@ -95,10 +97,10 @@ impl Property for TableProperty {
         let value = self.input.value()?;
         for (m, prop) in &self.matches {
             match m {
-                Match::Equal(v) if value == *v => {
+                Match::Equal(v) if value == v.value()? => {
                     return prop.value();
                 }
-                Match::Range(min, max) if value >= *min && value <= *max => {
+                Match::Range(min, max) if value >= min.value()? && value <= max.value()? => {
                     return prop.value();
                 }
                 Match::Any => {
@@ -164,7 +166,7 @@ mod tests {
     fn table_property_no_match() {
         let input = ValueProperty::new(1.0, Some("m"));
         let matches = vec![(
-            Match::Equal(2.0),
+            Match::Equal(Box::new(ValueProperty::new(2.0, Some("m")))),
             Box::new(ValueProperty::new(4.0, Some("m"))) as Box<dyn Property>,
         )];
         let p = TableProperty::new(Box::new(input), matches);
@@ -175,7 +177,7 @@ mod tests {
     fn table_property_equals() {
         let input = ValueProperty::new(2.0, Some("m"));
         let matches = vec![(
-            Match::Equal(2.0),
+            Match::Equal(Box::new(ValueProperty::new(2.0, Some("m")))),
             Box::new(ValueProperty::new(4.0, Some("m"))) as Box<dyn Property>,
         )];
         let p = TableProperty::new(Box::new(input), matches);
@@ -186,7 +188,10 @@ mod tests {
     fn table_property_range() {
         let input = ValueProperty::new(2.5, Some("m"));
         let matches = vec![(
-            Match::Range(2.0, 3.0),
+            Match::Range(
+                Box::new(ValueProperty::new(2.0, Some("m"))),
+                Box::new(ValueProperty::new(3.0, Some("m"))),
+            ),
             Box::new(ValueProperty::new(4.0, Some("m"))) as Box<dyn Property>,
         )];
         let p = TableProperty::new(Box::new(input), matches);
@@ -209,11 +214,14 @@ mod tests {
         let input = FormulaProperty::new("3!", Some("m")).unwrap();
         let matches = vec![
             (
-                Match::Equal(1.0),
+                Match::Equal(Box::new(ValueProperty::new(1.0, Some("m")))),
                 Box::new(ValueProperty::new(4.0, Some("m"))) as Box<dyn Property>,
             ),
             (
-                Match::Range(2.0, 7.0),
+                Match::Range(
+                    Box::new(ValueProperty::new(2.0, Some("m"))),
+                    Box::new(ValueProperty::new(7.0, Some("m"))),
+                ),
                 Box::new(FormulaProperty::new("5 + 1", Some("m")).unwrap()) as Box<dyn Property>,
             ),
             (
