@@ -276,7 +276,6 @@ pub mod tests {
         }
     }
 
-    #[derive(Debug)]
     pub enum TokenTree {
         Number(f64),
         Variable(String),
@@ -299,9 +298,9 @@ pub mod tests {
     impl TokenTree {
         fn postfix(&self) -> String {
             match self {
-                TokenTree::Number(value) => value.to_string(),
-                TokenTree::Variable(name) => name.to_string(),
-                TokenTree::Expression(lhs, operator, rhs) => once(lhs)
+                Self::Number(value) => value.to_string(),
+                Self::Variable(name) => name.to_string(),
+                Self::Expression(lhs, operator, rhs) => once(lhs)
                     .chain(once(rhs))
                     .filter_map(|t| t.as_ref())
                     .map(|t| t.postfix())
@@ -310,9 +309,9 @@ pub mod tests {
                         _ => operator.to_string(),
                     }))
                     .join(" "),
-                TokenTree::Function(name, operands) => operands
+                Self::Function(name, operands) => operands
                     .iter()
-                    .map(TokenTree::postfix)
+                    .map(Self::postfix)
                     .chain(once(name.clone()))
                     .join(" "),
             }
@@ -320,9 +319,9 @@ pub mod tests {
 
         pub fn infix(&self) -> Vec<Token> {
             match self {
-                TokenTree::Number(value) => vec![Token::Number(*value)],
-                TokenTree::Variable(name) => vec![Token::Identifier(name.clone())],
-                TokenTree::Expression(lhs, operator, rhs) => match (lhs.is_some(), rhs.is_some()) {
+                Self::Number(value) => vec![Token::Number(*value)],
+                Self::Variable(name) => vec![Token::Identifier(name.clone())],
+                Self::Expression(lhs, operator, rhs) => match (lhs.is_some(), rhs.is_some()) {
                     (false, true) => vec![
                         vec![Token::Bracket(LexerBracket::RoundOpen)],
                         vec![Token::Operator(operator.clone())],
@@ -347,11 +346,11 @@ pub mod tests {
                 .into_iter()
                 .flatten()
                 .collect(),
-                TokenTree::Function(name, operands) => {
+                Self::Function(name, operands) => {
                     let commas: Vec<_> = repeat(vec![Token::Operator(LexerOperator::Comma)])
                         .take(operands.len() - 1)
                         .collect();
-                    let expanded_operands: Vec<_> = operands.iter().map(TokenTree::infix).collect();
+                    let expanded_operands: Vec<_> = operands.iter().map(Self::infix).collect();
                     let separated_operands: Vec<_> = expanded_operands
                         .into_iter()
                         .interleave(commas.into_iter())
@@ -372,20 +371,64 @@ pub mod tests {
 
         pub fn variables(self) -> Vec<String> {
             match self {
-                TokenTree::Number(_) => vec![],
-                TokenTree::Variable(name) => vec![name],
-                TokenTree::Expression(lhs, _, rhs) => once(lhs)
+                Self::Number(_) => vec![],
+                Self::Variable(name) => vec![name],
+                Self::Expression(lhs, _, rhs) => once(lhs)
                     .chain(once(rhs))
                     .filter_map(|t| t)
                     .map(|t| t.variables())
                     .flatten()
                     .collect(),
-                TokenTree::Function(_, operands) => operands
+                Self::Function(_, operands) => operands
                     .into_iter()
-                    .map(TokenTree::variables)
+                    .map(Self::variables)
                     .flatten()
                     .collect(),
             }
+        }
+
+        fn fmt_classic(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            match self {
+                TokenTree::Number(x) => write!(f, "Number({:?}", x),
+                TokenTree::Variable(x) => write!(f, "Variable({:?}", x),
+                TokenTree::Expression(lhs, op, rhs) => {
+                    write!(f, "Expression(")?;
+                    match lhs {
+                        Some(b) => {
+                            b.fmt_classic(f)?;
+                        }
+                        None => {
+                            write!(f, "None")?;
+                        }
+                    }
+                    write!(f, ", {:?}, ", op)?;
+                    match rhs {
+                        Some(b) => b.fmt_classic(f),
+                        None => write!(f, "None"),
+                    }
+                }
+                TokenTree::Function(name, operands) => {
+                    write!(f, "Function({:?}, [", name)?;
+                    let mut it = operands.iter().peekable();
+                    while let Some(operand) = it.next() {
+                        if it.peek().is_some() {
+                            operand.fmt_classic(f)?;
+                            write!(f, ", ")?;
+                        } else {
+                            operand.fmt_classic(f)?;
+                        }
+                    }
+                    write!(f, "]")
+                }
+            }?;
+            write!(f, ")")
+        }
+    }
+
+    impl fmt::Debug for TokenTree {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            write!(f, "{} <=> ", self.infix_str())?;
+            self.fmt_classic(f)
         }
     }
 
@@ -693,9 +736,6 @@ pub mod tests {
         #[test]
         fn arbitrary_expression(token_tree: TokenTree) {
             let parser = Parser::new(&token_tree.infix());
-            if parser.is_err() {
-                println!("{}", token_tree.infix_str());
-            }
             prop_assert_eq!(parser.unwrap().postfix(), token_tree.postfix());
         }
     }

@@ -127,7 +127,6 @@ impl Formula {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use itertools::Itertools;
     use proptest::prelude::*;
 
     #[test]
@@ -213,7 +212,7 @@ mod tests {
 
     proptest! {
         #![proptest_config(ProptestConfig {
-            max_shrink_iters: 2048,
+            max_shrink_iters: 4096,
             .. ProptestConfig::default()
         })]
         #[test]
