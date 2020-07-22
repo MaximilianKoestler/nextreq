@@ -1,5 +1,22 @@
-trait Property {
-    fn value(&self) -> f64;
+use std::fmt;
+
+use crate::formula::{error::FormulaError, Formula};
+
+#[derive(Debug, Clone)]
+pub enum PropertyError {
+    FormulaError(FormulaError),
+}
+
+impl fmt::Display for PropertyError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::FormulaError(err) => write!(f, "{}", err),
+        }
+    }
+}
+
+pub trait Property {
+    fn value(&self) -> Result<f64, PropertyError>;
     fn unit(&self) -> Option<&str>;
 }
 
@@ -18,8 +35,8 @@ impl ValueProperty {
 }
 
 impl Property for ValueProperty {
-    fn value(&self) -> f64 {
-        self.value
+    fn value(&self) -> Result<f64, PropertyError> {
+        Ok(self.value)
     }
 
     fn unit(&self) -> Option<&str> {
@@ -27,23 +44,23 @@ impl Property for ValueProperty {
     }
 }
 
-struct FormulaProperty {
-    formula: String,
+pub struct FormulaProperty {
+    formula: Formula,
     unit: Option<String>,
 }
 
 impl FormulaProperty {
-    fn new(formula: &str, unit: Option<&str>) -> Self {
-        Self {
-            formula: formula.to_owned(),
+    pub fn new(formula: &str, unit: Option<&str>) -> Result<Self, FormulaError> {
+        Ok(Self {
+            formula: Formula::new(formula)?,
             unit: unit.map(ToOwned::to_owned),
-        }
+        })
     }
 }
 
 impl Property for FormulaProperty {
-    fn value(&self) -> f64 {
-        2.0
+    fn value(&self) -> Result<f64, PropertyError> {
+        self.formula.eval().map_err(PropertyError::FormulaError)
     }
 
     fn unit(&self) -> Option<&str> {
@@ -60,7 +77,7 @@ mod tests {
         #[test]
         fn value_property_keeps_value(value: f64, unit: Option<String>) {
             let p = ValueProperty::new(value, unit.as_deref());
-            prop_assert_eq!(p.value(), value);
+            prop_assert_eq!(p.value().unwrap(), value);
         }
     }
 
@@ -75,7 +92,22 @@ mod tests {
 
     #[test]
     fn formula_addition() {
-        let p = FormulaProperty::new("1 + 1", Some("m"));
-        assert_eq!(p.value(), 2.0);
+        let p = FormulaProperty::new("1 + 2", Some("m")).unwrap();
+        assert_eq!(p.value().unwrap(), 3.0);
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig {
+            cases: 1024,
+            .. ProptestConfig::default()
+        })]
+        #[test]
+        fn formula_does_not_crash(input: String) {
+            let p = FormulaProperty::new(&input, Some("m"));
+
+            if p.is_ok() {
+                let _ = p.unwrap().value();
+            }
+        }
     }
 }

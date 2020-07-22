@@ -10,9 +10,9 @@ pub enum FormulaError {
 impl fmt::Display for FormulaError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            FormulaError::LexerError(msg) => write!(f, "Lexing Error: {}", msg),
-            FormulaError::ParserError(msg) => write!(f, "Parsing Error: {}", msg),
-            FormulaError::EvaluationError(msg) => write!(f, "Evaluation Error: {}", msg),
+            Self::LexerError(msg) => write!(f, "Lexing Error: {}", msg),
+            Self::ParserError(msg) => write!(f, "Parsing Error: {}", msg),
+            Self::EvaluationError(msg) => write!(f, "Evaluation Error: {}", msg),
         }
     }
 }
