@@ -3,10 +3,12 @@ use std::ops::Deref;
 
 use super::error::FormulaError;
 use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, Token};
+use super::quoted_string::Quotable;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(f64),
+    Literal(String),
     Variable(String),
 }
 
@@ -14,6 +16,7 @@ impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Number(n) => write!(f, "{}", n),
+            Self::Literal(n) => write!(f, "\"{}\"", n),
             Self::Variable(s) => write!(f, "{}", s),
         }
     }
@@ -127,6 +130,9 @@ impl Parser {
 
         match it.next() {
             Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
+            Some(Token::Literal(text)) => {
+                result.push(ParseItem::Value(Value::Literal(text.clone())))
+            }
             Some(Token::Identifier(name)) => {
                 if let Some(Token::Bracket(LexerBracket::RoundOpen)) = it.peek() {
                     let (function, params) = Self::function_item(name)?;
@@ -278,6 +284,7 @@ pub mod tests {
 
     pub enum TokenTree {
         Number(f64),
+        Literal(String),
         Variable(String),
         Expression(
             Option<Box<TokenTree>>,
@@ -299,6 +306,7 @@ pub mod tests {
         fn postfix(&self) -> String {
             match self {
                 Self::Number(value) => value.to_string(),
+                Self::Literal(text) => text.quote(),
                 Self::Variable(name) => name.to_string(),
                 Self::Expression(lhs, operator, rhs) => once(lhs)
                     .chain(once(rhs))
@@ -320,6 +328,7 @@ pub mod tests {
         pub fn infix(&self) -> Vec<Token> {
             match self {
                 Self::Number(value) => vec![Token::Number(*value)],
+                Self::Literal(value) => vec![Token::Literal(value.clone())],
                 Self::Variable(name) => vec![Token::Identifier(name.clone())],
                 Self::Expression(lhs, operator, rhs) => match (lhs.is_some(), rhs.is_some()) {
                     (false, true) => vec![
@@ -371,7 +380,7 @@ pub mod tests {
 
         pub fn variables(self) -> Vec<String> {
             match self {
-                Self::Number(_) => vec![],
+                Self::Number(_) | Self::Literal(_) => vec![],
                 Self::Variable(name) => vec![name],
                 Self::Expression(lhs, _, rhs) => once(lhs)
                     .chain(once(rhs))
@@ -390,6 +399,7 @@ pub mod tests {
         fn fmt_classic(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
             match self {
                 TokenTree::Number(x) => write!(f, "Number({:?}", x),
+                TokenTree::Literal(x) => write!(f, "Literal({:?}", x),
                 TokenTree::Variable(x) => write!(f, "Variable({:?}", x),
                 TokenTree::Expression(lhs, op, rhs) => {
                     write!(f, "Expression(")?;
@@ -500,6 +510,7 @@ pub mod tests {
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             let leaf = prop_oneof![
                 (0..100u32).prop_map(|v| TokenTree::Number(v as f64)),
+                r"[[:lower:]]{3}".prop_map(TokenTree::Literal),
                 r"[[:lower:]]{1}".prop_map(TokenTree::Variable),
             ];
 
@@ -531,6 +542,16 @@ pub mod tests {
             let tokens = vec![Token::Number(value)];
             let parser = Parser::new(&tokens).unwrap();
             prop_assert_eq!(parser.postfix(), value.to_string());
+        }
+    }
+
+    proptest! {
+        #[test]
+        fn parse_literal(text: String) {
+            let tokens = vec![Token::Literal(text.clone())];
+            let parser = Parser::new(&tokens).unwrap();
+            let expected = format!("\"{}\"", text);
+            prop_assert_eq!(parser.postfix(), expected);
         }
     }
 
@@ -726,6 +747,28 @@ pub mod tests {
             Token::Bracket(LexerBracket::RoundClose),
         ])
         .is_err());
+    }
+
+    #[test]
+    fn parse_literal_operations() {
+        let parser = Parser::new(&vec![
+            Token::Literal("abc".to_owned()),
+            Token::Operator(LexerOperator::Plus),
+            Token::Literal("def".to_owned()),
+            Token::Operator(LexerOperator::Minus),
+            Token::Number(3.0),
+        ])
+        .unwrap();
+        assert_eq!(parser.postfix(), format!(r#""abc" "def" + 3 -"#));
+
+        let parser = Parser::new(&vec![
+            Token::Identifier("sqrt".to_owned()),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Literal("abc".to_owned()),
+            Token::Bracket(LexerBracket::RoundClose),
+        ])
+        .unwrap();
+        assert_eq!(parser.postfix(), format!(r#""abc" sqrt"#));
     }
 
     proptest! {

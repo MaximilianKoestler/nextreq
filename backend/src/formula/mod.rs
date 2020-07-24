@@ -56,6 +56,7 @@ impl Formula {
             match item {
                 parser::ParseItem::Value(v) => match v {
                     parser::Value::Number(value) => stack.push(*value),
+                    parser::Value::Literal(_) => stack.push(0.0),
                     parser::Value::Variable(name) => {
                         let var = var!(vars, name);
                         stack.push(var);
