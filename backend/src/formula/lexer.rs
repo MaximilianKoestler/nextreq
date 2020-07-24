@@ -120,7 +120,7 @@ impl Lexer {
                 }
                 '"' => {
                     let literal = Self::get_literal(&mut it);
-                    tokens.push(Token::Literal(literal.to_owned()));
+                    tokens.push(Token::Literal(literal?.to_owned()));
                 }
                 x if x.is_alphabetic() => {
                     let value = Self::get_identifier(&mut it);
@@ -173,11 +173,17 @@ impl Lexer {
             .map_err(|err: std::num::ParseFloatError| FormulaError::LexerError(err.to_string()))
     }
 
-    fn get_literal<'a>(it: &'a mut str::Chars) -> &'a str {
+    fn get_literal<'a>(it: &'a mut str::Chars) -> Result<&'a str, FormulaError> {
         it.next();
         let result = it.take_prefix(|c| *c != '"');
         it.next();
-        result
+        if let Some('"') = it.clone().next() {
+            Ok(result)
+        } else {
+            Err(FormulaError::LexerError(
+                "literal not terminated by \"".to_owned(),
+            ))
+        }
     }
 
     fn get_identifier<'a>(it: &'a mut str::Chars) -> &'a str {
@@ -282,6 +288,7 @@ mod tests {
     fn tokenize_invalid() {
         assert!(Lexer::new("$").is_err());
         assert!(Lexer::new("1.0.0").is_err());
+        assert!(Lexer::new("\"abc").is_err());
     }
 
     proptest! {
