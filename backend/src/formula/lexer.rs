@@ -178,7 +178,7 @@ impl Lexer {
         let result = it.take_prefix(|c| *c != '"');
 
         let to_check = if result.is_empty() {
-            it.next()
+            it.clone().next()
         } else {
             it.next();
             it.clone().next()
