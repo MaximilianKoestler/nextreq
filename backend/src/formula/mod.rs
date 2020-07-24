@@ -3,6 +3,7 @@ pub mod lexer;
 pub mod parser;
 mod quoted_string;
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
 
@@ -65,7 +66,7 @@ macro_rules! enforce_number {
 
 type VariableDict = HashMap<String, f64>;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Value {
     Number(f64),
     Literal(String),
@@ -76,6 +77,17 @@ impl fmt::Display for Value {
         match self {
             Self::Number(x) => write!(f, "{}", x),
             Self::Literal(x) => write!(f, "{}", x.quote()),
+        }
+    }
+}
+
+impl PartialOrd<Value> for Value {
+    fn partial_cmp(&self, other: &Value) -> Option<Ordering> {
+        match (self, other) {
+            (Number(s), Number(o)) => s.partial_cmp(o),
+            (Number(_), Literal(_)) => todo!(),
+            (Literal(_), Number(_)) => todo!(),
+            (Literal(s), Literal(o)) => todo!(),
         }
     }
 }

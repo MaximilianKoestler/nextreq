@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::formula::{error::FormulaError, Formula, Value};
+use crate::formula::{error::FormulaError, Formula, Value, Value::Literal, Value::Number};
 
 #[derive(Debug, Clone)]
 pub enum PropertyError {
@@ -18,19 +18,19 @@ impl fmt::Display for PropertyError {
 }
 
 pub trait Property {
-    fn value(&self) -> Result<f64, PropertyError>;
+    fn value(&self) -> Result<Value, PropertyError>;
     fn unit(&self) -> Option<&str>;
 }
 
 type PropBox = Box<dyn Property>;
 
 struct ValueProperty {
-    value: f64,
+    value: Value,
     unit: Option<String>,
 }
 
 impl ValueProperty {
-    fn new(value: f64, unit: Option<&str>) -> Self {
+    fn new(value: Value, unit: Option<&str>) -> Self {
         Self {
             value,
             unit: unit.map(ToOwned::to_owned),
@@ -39,8 +39,8 @@ impl ValueProperty {
 }
 
 impl Property for ValueProperty {
-    fn value(&self) -> Result<f64, PropertyError> {
-        Ok(self.value)
+    fn value(&self) -> Result<Value, PropertyError> {
+        Ok(self.value.clone())
     }
 
     fn unit(&self) -> Option<&str> {
@@ -63,14 +63,8 @@ impl FormulaProperty {
 }
 
 impl Property for FormulaProperty {
-    fn value(&self) -> Result<f64, PropertyError> {
-        self.formula
-            .eval()
-            .map_err(PropertyError::FormulaError)
-            .map(|v| match v {
-                Value::Number(v) => v,
-                Value::Literal(_) => 0.0,
-            })
+    fn value(&self) -> Result<Value, PropertyError> {
+        self.formula.eval().map_err(PropertyError::FormulaError)
     }
 
     fn unit(&self) -> Option<&str> {
@@ -99,7 +93,7 @@ impl TableProperty {
 }
 
 impl Property for TableProperty {
-    fn value(&self) -> Result<f64, PropertyError> {
+    fn value(&self) -> Result<Value, PropertyError> {
         let value = self.input.value()?;
         for (m, prop) in &self.matches {
             match m {
@@ -133,8 +127,8 @@ mod tests {
     proptest! {
         #[test]
         fn value_property_keeps_value(value: f64, unit: Option<String>) {
-            let p = ValueProperty::new(value, unit.as_deref());
-            prop_assert_eq!(p.value().unwrap(), value);
+            let p = ValueProperty::new(Number(value), unit.as_deref());
+            prop_assert_eq!(p.value().unwrap(), Number(value));
         }
     }
 
@@ -142,7 +136,7 @@ mod tests {
         #[test]
         fn value_property_keeps_unit(value: f64, unit: Option<String>) {
             let unit = unit.as_deref();
-            let p = ValueProperty::new(value, unit);
+            let p = ValueProperty::new(Number(value), unit);
             prop_assert_eq!(p.unit(), unit);
         }
     }
@@ -150,7 +144,7 @@ mod tests {
     #[test]
     fn formula_property_addition() {
         let p = FormulaProperty::new("1 + 2", Some("m")).unwrap();
-        assert_eq!(p.value().unwrap(), 3.0);
+        assert_eq!(p.value().unwrap(), Number(3.0));
     }
 
     proptest! {
@@ -170,10 +164,10 @@ mod tests {
 
     #[test]
     fn table_property_no_match() {
-        let input = ValueProperty::new(1.0, Some("m"));
+        let input = ValueProperty::new(Number(1.0), Some("m"));
         let matches = vec![(
-            Match::Equal(Box::new(ValueProperty::new(2.0, Some("m")))),
-            Box::new(ValueProperty::new(4.0, Some("m"))) as Box<dyn Property>,
+            Match::Equal(Box::new(ValueProperty::new(Number(2.0), Some("m")))),
+            Box::new(ValueProperty::new(Number(4.0), Some("m"))) as Box<dyn Property>,
         )];
         let p = TableProperty::new(Box::new(input), matches);
         assert!(p.value().is_err());
@@ -181,38 +175,38 @@ mod tests {
 
     #[test]
     fn table_property_equals() {
-        let input = ValueProperty::new(2.0, Some("m"));
+        let input = ValueProperty::new(Number(2.0), Some("m"));
         let matches = vec![(
-            Match::Equal(Box::new(ValueProperty::new(2.0, Some("m")))),
-            Box::new(ValueProperty::new(4.0, Some("m"))) as Box<dyn Property>,
+            Match::Equal(Box::new(ValueProperty::new(Number(2.0), Some("m")))),
+            Box::new(ValueProperty::new(Number(4.0), Some("m"))) as Box<dyn Property>,
         )];
         let p = TableProperty::new(Box::new(input), matches);
-        assert_eq!(p.value().unwrap(), 4.0);
+        assert_eq!(p.value().unwrap(), Number(4.0));
     }
 
     #[test]
     fn table_property_range() {
-        let input = ValueProperty::new(2.5, Some("m"));
+        let input = ValueProperty::new(Number(2.5), Some("m"));
         let matches = vec![(
             Match::Range(
-                Box::new(ValueProperty::new(2.0, Some("m"))),
-                Box::new(ValueProperty::new(3.0, Some("m"))),
+                Box::new(ValueProperty::new(Number(2.0), Some("m"))),
+                Box::new(ValueProperty::new(Number(3.0), Some("m"))),
             ),
-            Box::new(ValueProperty::new(4.0, Some("m"))) as Box<dyn Property>,
+            Box::new(ValueProperty::new(Number(4.0), Some("m"))) as Box<dyn Property>,
         )];
         let p = TableProperty::new(Box::new(input), matches);
-        assert_eq!(p.value().unwrap(), 4.0);
+        assert_eq!(p.value().unwrap(), Number(4.0));
     }
 
     #[test]
     fn table_property_any() {
-        let input = ValueProperty::new(0.0, Some("m"));
+        let input = ValueProperty::new(Number(0.0), Some("m"));
         let matches = vec![(
             Match::Any,
-            Box::new(ValueProperty::new(4.0, Some("m"))) as Box<dyn Property>,
+            Box::new(ValueProperty::new(Number(4.0), Some("m"))) as Box<dyn Property>,
         )];
         let p = TableProperty::new(Box::new(input), matches);
-        assert_eq!(p.value().unwrap(), 4.0);
+        assert_eq!(p.value().unwrap(), Number(4.0));
     }
 
     #[test]
@@ -220,22 +214,22 @@ mod tests {
         let input = FormulaProperty::new("3!", Some("m")).unwrap();
         let matches = vec![
             (
-                Match::Equal(Box::new(ValueProperty::new(1.0, Some("m")))),
-                Box::new(ValueProperty::new(4.0, Some("m"))) as Box<dyn Property>,
+                Match::Equal(Box::new(ValueProperty::new(Number(1.0), Some("m")))),
+                Box::new(ValueProperty::new(Number(4.0), Some("m"))) as Box<dyn Property>,
             ),
             (
                 Match::Range(
-                    Box::new(ValueProperty::new(2.0, Some("m"))),
-                    Box::new(ValueProperty::new(7.0, Some("m"))),
+                    Box::new(ValueProperty::new(Number(2.0), Some("m"))),
+                    Box::new(ValueProperty::new(Number(7.0), Some("m"))),
                 ),
                 Box::new(FormulaProperty::new("5 + 1", Some("m")).unwrap()) as Box<dyn Property>,
             ),
             (
                 Match::Any,
-                Box::new(ValueProperty::new(2.0, Some("m"))) as Box<dyn Property>,
+                Box::new(ValueProperty::new(Number(2.0), Some("m"))) as Box<dyn Property>,
             ),
         ];
         let p = TableProperty::new(Box::new(input), matches);
-        assert_eq!(p.value().unwrap(), 6.0);
+        assert_eq!(p.value().unwrap(), Number(6.0));
     }
 }
