@@ -176,8 +176,15 @@ impl Lexer {
     fn get_literal<'a>(it: &'a mut str::Chars) -> Result<&'a str, FormulaError> {
         it.next();
         let result = it.take_prefix(|c| *c != '"');
-        it.next();
-        if let Some('"') = it.clone().next() {
+
+        let to_check = if result.is_empty() {
+            it.next()
+        } else {
+            it.next();
+            it.clone().next()
+        };
+
+        if let Some('"') = to_check {
             Ok(result)
         } else {
             Err(FormulaError::LexerError(
@@ -213,7 +220,7 @@ mod tests {
     }
 
     fn literal_strategy() -> BoxedStrategy<String> {
-        proptest::string::string_regex("[^\"]").unwrap().boxed()
+        proptest::string::string_regex("[^\"]*").unwrap().boxed()
     }
 
     impl Arbitrary for Operator {
