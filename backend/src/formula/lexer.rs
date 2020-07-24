@@ -49,6 +49,7 @@ impl fmt::Display for Bracket {
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
     Number(f64),
+    Literal(String),
     Identifier(String),
     Operator(Operator),
     Bracket(Bracket),
@@ -58,6 +59,7 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Number(n) => write!(f, "{}", n),
+            Self::Literal(l) => write!(f, "\"{}\"", l),
             Self::Identifier(s) => write!(f, "{}", s),
             Self::Operator(o) => write!(f, "{}", o),
             Self::Bracket(b) => write!(f, "{}", b),
@@ -115,6 +117,10 @@ impl Lexer {
                     let value = Self::get_number(&mut it)?;
                     tokens.push(Token::Number(value));
                 }
+                '"' => {
+                    let literal = Self::get_literal(&mut it);
+                    tokens.push(Token::Literal(literal.to_owned()));
+                }
                 x if x.is_alphabetic() => {
                     let value = Self::get_identifier(&mut it);
                     tokens.push(Token::Identifier(value.to_owned()));
@@ -166,6 +172,13 @@ impl Lexer {
             .map_err(|err: std::num::ParseFloatError| FormulaError::LexerError(err.to_string()))
     }
 
+    fn get_literal<'a>(it: &'a mut str::Chars) -> &'a str {
+        it.next();
+        let result = it.take_prefix(|c| *c != '"');
+        it.next();
+        result
+    }
+
     fn get_identifier<'a>(it: &'a mut str::Chars) -> &'a str {
         it.take_prefix(|c| c.is_alphanumeric())
     }
@@ -190,6 +203,10 @@ mod tests {
         proptest::string::string_regex(r"\p{Alphabetic}[\p{Alphabetic}\d]{0,32}")
             .unwrap()
             .boxed()
+    }
+
+    fn literal_strategy() -> BoxedStrategy<String> {
+        proptest::string::string_regex("[^\"]").unwrap().boxed()
     }
 
     impl Arbitrary for Operator {
@@ -226,6 +243,7 @@ mod tests {
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             prop_oneof![
                 any::<f64>().prop_map(Self::Number),
+                literal_strategy().prop_map(Self::Literal),
                 identifier_strategy().prop_map(Self::Identifier),
                 any::<Operator>().prop_map(Self::Operator),
                 any::<Bracket>().prop_map(Self::Bracket),
@@ -267,13 +285,22 @@ mod tests {
 
     proptest! {
         #[test]
-        fn tokenize_value(value: f64, spaces in whitespace_strategy()) {
+        fn tokenize_number(value: f64, spaces in whitespace_strategy()) {
             let lexer = Lexer::new(&format!("{}{}", value, spaces)).unwrap();
 
             let mut expected = vec![Token::Number(value.abs())];
             if value < 0.0 {
                 expected.insert(0, Token::Operator(Operator::Minus))
             }
+            prop_assert_eq!(&lexer[..], &expected[..]);
+        }
+    }
+
+    proptest! {
+    #[test]
+        fn tokenize_literal(text in literal_strategy(), spaces in whitespace_strategy()) {
+            let lexer = Lexer::new(&format!("{sp}\"{}\"{sp}", text, sp = spaces)).unwrap();
+            let expected = vec![Token::Literal(text)];
             prop_assert_eq!(&lexer[..], &expected[..]);
         }
     }
@@ -324,7 +351,7 @@ mod tests {
 
     #[test]
     fn tokenize_complex_expression() {
-        let lexer = Lexer::new("0+ fn3(1.5 + 10* -200, 5)/3^你好!").unwrap();
+        let lexer = Lexer::new("0+ fn3(1.5 + 10* -200, 5)/3^你好! \"Hi\"").unwrap();
         let expected = vec![
             Token::Number(0.0),
             Token::Operator(Operator::Plus),
@@ -344,6 +371,7 @@ mod tests {
             Token::Operator(Operator::Caret),
             Token::Identifier("你好".to_owned()),
             Token::Operator(Operator::ExclamationMark),
+            Token::Literal("Hi".to_owned()),
         ];
         assert_eq!(&lexer[..], &expected[..]);
     }
@@ -360,6 +388,8 @@ mod tests {
                 .iter()
                 .flat_map(|(token, space)| once(token.to_string()).chain(once(space.clone())))
                 .join("");
+
+            println!("{}", token_str);
 
             let expected: Vec<_> = input
                 .into_iter()
