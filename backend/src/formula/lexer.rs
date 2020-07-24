@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::str;
 
 use super::error::FormulaError;
+use super::quoted_string::Quotable;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Operator {
@@ -59,7 +60,7 @@ impl fmt::Display for Token {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Number(n) => write!(f, "{}", n),
-            Self::Literal(l) => write!(f, "\"{}\"", l),
+            Self::Literal(l) => write!(f, "{}", l.quote()),
             Self::Identifier(s) => write!(f, "{}", s),
             Self::Operator(o) => write!(f, "{}", o),
             Self::Bracket(b) => write!(f, "{}", b),
@@ -299,7 +300,7 @@ mod tests {
     proptest! {
     #[test]
         fn tokenize_literal(text in literal_strategy(), spaces in whitespace_strategy()) {
-            let lexer = Lexer::new(&format!("{sp}\"{}\"{sp}", text, sp = spaces)).unwrap();
+            let lexer = Lexer::new(&format!("{sp}{}{sp}", text.quote(), sp = spaces)).unwrap();
             let expected = vec![Token::Literal(text)];
             prop_assert_eq!(&lexer[..], &expected[..]);
         }

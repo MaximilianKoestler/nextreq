@@ -1,6 +1,7 @@
 pub mod error;
 pub mod lexer;
 pub mod parser;
+mod quoted_string;
 
 use std::collections::HashMap;
 
