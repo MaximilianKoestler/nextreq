@@ -89,35 +89,46 @@ impl PartialOrd<Value> for Value {
     fn partial_cmp(&self, other: &Value) -> Option<Ordering> {
         match (self, other) {
             (Number(s), Number(o)) => s.partial_cmp(o),
-            (Number(_), Literal(_)) => todo!(),
-            (Literal(_), Number(_)) => todo!(),
-            (Literal(s), Literal(o)) => todo!(),
+            (Number(_), Literal(_)) => None,
+            (Literal(_), Number(_)) => None,
+            (Literal(s), Literal(o)) => s.partial_cmp(o),
         }
     }
 }
 
 impl Add for Value {
-    type Output = Self;
+    type Output = Result<Self, FormulaError>;
 
-    fn add(self, other: Self) -> Self {
+    fn add(self, other: Self) -> Self::Output {
         match (self, other) {
-            (Number(s), Number(o)) => Number(s + o),
-            (Number(_), Literal(_)) => todo!(),
-            (Literal(_), Number(_)) => todo!(),
-            (Literal(s), Literal(o)) => Literal(format!("{}{}", s, o)),
+            (Number(s), Number(o)) => Ok(Number(s + o)),
+            (Number(_), Literal(_)) => error!("literals cannot be added to numbers"),
+            (Literal(_), Number(_)) => error!("numbers cannot be added to literals"),
+            (Literal(s), Literal(o)) => Ok(Literal(format!("{}{}", s, o))),
         }
     }
 }
 
 impl Mul for Value {
-    type Output = Self;
+    type Output = Result<Self, FormulaError>;
 
-    fn mul(self, other: Self) -> Self {
+    fn mul(self, other: Self) -> Self::Output {
         match (self, other) {
-            (Number(s), Number(o)) => Number(s * o),
-            (Number(_), Literal(_)) => todo!(),
-            (Literal(s), Number(o)) => Literal(repeat(s).take(o as usize).collect::<String>()),
-            (Literal(_), Literal(_)) => todo!(),
+            (Number(s), Number(o)) => Ok(Number(s * o)),
+            (Number(_), Literal(_)) => error!("numbers cannot be multiplied with literals"),
+            (Literal(s), Number(o)) => {
+                let o = o as usize;
+                const MAXIMIUM_LENGTH: usize = 4096;
+                let target_length = s.len() * o;
+                if target_length > MAXIMIUM_LENGTH {
+                    error!(
+                        "resulting string would be of length {} which is more than the maximum {}",
+                        target_length, MAXIMIUM_LENGTH
+                    );
+                }
+                Ok(Literal(repeat(s).take(o as usize).collect::<String>()))
+            }
+            (Literal(_), Literal(_)) => error!("literals cannot be multiplied with literals"),
         }
     }
 }
@@ -153,7 +164,7 @@ impl Formula {
                     parser::Operator::Add => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push(lhs + rhs);
+                        stack.push((lhs + rhs)?);
                     }
                     parser::Operator::Sub => {
                         let rhs = take!(stack);
@@ -164,7 +175,7 @@ impl Formula {
                     parser::Operator::Mul => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push(lhs * rhs);
+                        stack.push((lhs * rhs)?);
                     }
                     parser::Operator::Div => {
                         let rhs = take!(stack);
@@ -229,6 +240,14 @@ impl Formula {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+
+    #[test]
+    fn value_ordering() {
+        assert!(Number(3.0) > Number(2.0));
+        assert_eq!(Number(3.0).partial_cmp(&Literal("a".to_owned())), None);
+        assert_eq!(Literal("a".to_owned()).partial_cmp(&Number(3.0)), None);
+        assert!(Literal("b".to_owned()) > Literal("a".to_owned()));
+    }
 
     #[test]
     fn evaluate_addition() {
@@ -326,6 +345,46 @@ mod tests {
     fn evaluate_string_multiplication() {
         let formula = Formula::new(r#" "a" * 4 "#).unwrap();
         assert_eq!(formula.eval().unwrap(), Literal("aaaa".to_owned()));
+
+        // too long strings cannot be produced
+        assert!(Formula::new(r#"  "a"  *  4097 "#).unwrap().eval().is_err());
+    }
+
+    #[test]
+    fn operation_viability() {
+        assert!(Formula::new(r#"  1  +  1 "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#"  1  + "a" "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" +  1 "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" + "a" "#).unwrap().eval().is_ok());
+
+        assert!(Formula::new(r#"  1  -  1 "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#"  1  - "a" "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" -  1 "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" - "a" "#).unwrap().eval().is_err());
+
+        assert!(Formula::new(r#"  1  *  1 "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#"  1  * "a" "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" *  1 "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#" "a" * "a" "#).unwrap().eval().is_err());
+
+        assert!(Formula::new(r#"  1  /  1 "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#"  1  / "a" "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" /  1 "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" / "a" "#).unwrap().eval().is_err());
+
+        assert!(Formula::new(r#"  1  ^  1 "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#"  1  ^ "a" "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" ^  1 "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" ^ "a" "#).unwrap().eval().is_err());
+
+        assert!(Formula::new(r#" +  1  "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#" + "a" "#).unwrap().eval().is_ok());
+
+        assert!(Formula::new(r#" -  1  "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#" - "a" "#).unwrap().eval().is_err());
+
+        assert!(Formula::new(r#"  1 ! "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#" "a"! "#).unwrap().eval().is_err());
     }
 
     proptest! {
