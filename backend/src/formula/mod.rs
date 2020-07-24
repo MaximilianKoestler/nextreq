@@ -114,7 +114,7 @@ impl Mul for Value {
 
     fn mul(self, other: Self) -> Self {
         match (self, other) {
-            (Number(s), Number(o)) => Number(s + o),
+            (Number(s), Number(o)) => Number(s * o),
             (Number(_), Literal(_)) => todo!(),
             (Literal(s), Number(o)) => Literal(repeat(s).take(o as usize).collect::<String>()),
             (Literal(_), Literal(_)) => todo!(),
