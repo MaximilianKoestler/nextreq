@@ -115,18 +115,26 @@ impl Mul for Value {
     fn mul(self, other: Self) -> Self::Output {
         match (self, other) {
             (Number(s), Number(o)) => Ok(Number(s * o)),
-            (Number(_), Literal(_)) => error!("numbers cannot be multiplied with literals"),
-            (Literal(s), Number(o)) => {
-                let o = o as usize;
-                const MAXIMIUM_LENGTH: usize = 4096;
-                let target_length = s.len() * o;
-                if target_length > MAXIMIUM_LENGTH {
-                    error!(
-                        "resulting string would be of length {} which is more than the maximum {}",
-                        target_length, MAXIMIUM_LENGTH
-                    );
+            (Number(n), Literal(l)) | (Literal(l), Number(n)) => {
+                if l.is_empty() {
+                    return Ok(Literal(l));
                 }
-                Ok(Literal(repeat(s).take(o as usize).collect::<String>()))
+
+                let n = n as usize;
+                let single_length = l.len();
+                const MAXIMIUM_LENGTH: usize = 4096;
+
+                if let Some(combined_length) = single_length.checked_mul(n) {
+                    if combined_length > MAXIMIUM_LENGTH {
+                        error!(
+                        "resulting string would be of length {} which is more than the maximum {}",
+                        combined_length, MAXIMIUM_LENGTH
+                    );
+                    }
+                    Ok(Literal(repeat(l).take(n).collect::<String>()))
+                } else {
+                    error!("computing the space requirements for {} literals of length {} results in an overflow", n, single_length)
+                }
             }
             (Literal(_), Literal(_)) => error!("literals cannot be multiplied with literals"),
         }
@@ -343,11 +351,21 @@ mod tests {
 
     #[test]
     fn evaluate_string_multiplication() {
-        let formula = Formula::new(r#" "a" * 4 "#).unwrap();
-        assert_eq!(formula.eval().unwrap(), Literal("aaaa".to_owned()));
+        assert_eq!(
+            Formula::new(r#" "a" * 4 "#).unwrap().eval().unwrap(),
+            Literal("aaaa".to_owned())
+        );
+        assert_eq!(
+            Formula::new(r#" 4 * "a" "#).unwrap().eval().unwrap(),
+            Literal("aaaa".to_owned())
+        );
 
         // too long strings cannot be produced
-        assert!(Formula::new(r#"  "a"  *  4097 "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" "a" * 4097 "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#" 4097 * "a" "#).unwrap().eval().is_err());
+        // except all spaces
+        assert!(Formula::new(r#" "" * 100! "#).unwrap().eval().is_ok());
+        assert!(Formula::new(r#" 100! * "" "#).unwrap().eval().is_ok());
     }
 
     #[test]
@@ -363,7 +381,7 @@ mod tests {
         assert!(Formula::new(r#" "a" - "a" "#).unwrap().eval().is_err());
 
         assert!(Formula::new(r#"  1  *  1 "#).unwrap().eval().is_ok());
-        assert!(Formula::new(r#"  1  * "a" "#).unwrap().eval().is_err());
+        assert!(Formula::new(r#"  1  * "a" "#).unwrap().eval().is_ok());
         assert!(Formula::new(r#" "a" *  1 "#).unwrap().eval().is_ok());
         assert!(Formula::new(r#" "a" * "a" "#).unwrap().eval().is_err());
 
