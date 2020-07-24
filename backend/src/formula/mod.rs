@@ -6,6 +6,8 @@ mod quoted_string;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt;
+use std::iter::repeat;
+use std::ops::{Add, Mul};
 
 use error::FormulaError;
 use quoted_string::Quotable;
@@ -72,6 +74,8 @@ pub enum Value {
     Literal(String),
 }
 
+use Value::{Literal, Number};
+
 impl fmt::Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -92,7 +96,31 @@ impl PartialOrd<Value> for Value {
     }
 }
 
-use Value::{Literal, Number};
+impl Add for Value {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self {
+        match (self, other) {
+            (Number(s), Number(o)) => Number(s + o),
+            (Number(_), Literal(_)) => todo!(),
+            (Literal(_), Number(_)) => todo!(),
+            (Literal(s), Literal(o)) => Literal(format!("{}{}", s, o)),
+        }
+    }
+}
+
+impl Mul for Value {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self {
+        match (self, other) {
+            (Number(s), Number(o)) => Number(s + o),
+            (Number(_), Literal(_)) => todo!(),
+            (Literal(s), Number(o)) => Literal(repeat(s).take(o as usize).collect::<String>()),
+            (Literal(_), Literal(_)) => todo!(),
+        }
+    }
+}
 
 impl Formula {
     pub fn new(input: &str) -> Result<Self, FormulaError> {
@@ -125,8 +153,7 @@ impl Formula {
                     parser::Operator::Add => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        let (rhs, lhs) = enforce_number!("addition operator", rhs, lhs);
-                        stack.push(Number(lhs + rhs));
+                        stack.push(lhs + rhs);
                     }
                     parser::Operator::Sub => {
                         let rhs = take!(stack);
@@ -137,8 +164,7 @@ impl Formula {
                     parser::Operator::Mul => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        let (rhs, lhs) = enforce_number!("multiplication operator", rhs, lhs);
-                        stack.push(Number(lhs * rhs));
+                        stack.push(lhs * rhs);
                     }
                     parser::Operator::Div => {
                         let rhs = take!(stack);
@@ -286,8 +312,20 @@ mod tests {
 
     #[test]
     fn evaluate_literal() {
-        let formula = Formula::new(r#""Hello, World!""#).unwrap();
+        let formula = Formula::new(r#" "Hello, World!" "#).unwrap();
         assert_eq!(formula.eval().unwrap(), Literal("Hello, World!".to_owned()));
+    }
+
+    #[test]
+    fn evaluate_concatenation() {
+        let formula = Formula::new(r#" "Hello, " + "World!" "#).unwrap();
+        assert_eq!(formula.eval().unwrap(), Literal("Hello, World!".to_owned()));
+    }
+
+    #[test]
+    fn evaluate_string_multiplication() {
+        let formula = Formula::new(r#" "a" * 4 "#).unwrap();
+        assert_eq!(formula.eval().unwrap(), Literal("aaaa".to_owned()));
     }
 
     proptest! {
