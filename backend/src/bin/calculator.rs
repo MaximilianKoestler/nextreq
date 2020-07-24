@@ -36,7 +36,12 @@ fn main() {
         match result {
             Ok(val) => {
                 println!("ans = {}", val);
-                vars.insert("ans".to_owned(), val);
+                match val {
+                    nextreq::formula::Value::Number(v) => {
+                        vars.insert("ans".to_owned(), v);
+                    }
+                    nextreq::formula::Value::Literal(_) => {}
+                };
             }
             Err(err) => println!("{}", err),
         }

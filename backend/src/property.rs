@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::formula::{error::FormulaError, Formula};
+use crate::formula::{error::FormulaError, Formula, Value};
 
 #[derive(Debug, Clone)]
 pub enum PropertyError {
@@ -64,7 +64,13 @@ impl FormulaProperty {
 
 impl Property for FormulaProperty {
     fn value(&self) -> Result<f64, PropertyError> {
-        self.formula.eval().map_err(PropertyError::FormulaError)
+        self.formula
+            .eval()
+            .map_err(PropertyError::FormulaError)
+            .map(|v| match v {
+                Value::Number(v) => v,
+                Value::Literal(_) => 0.0,
+            })
     }
 
     fn unit(&self) -> Option<&str> {

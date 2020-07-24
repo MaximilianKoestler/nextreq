@@ -4,8 +4,10 @@ pub mod parser;
 mod quoted_string;
 
 use std::collections::HashMap;
+use std::fmt;
 
 use error::FormulaError;
+use quoted_string::Quotable;
 
 pub struct Formula {
     parser: parser::Parser,
@@ -33,7 +35,52 @@ macro_rules! var {
     };
 }
 
+macro_rules! error {
+    ($($arg:tt)*) => {{
+        return Err(FormulaError::EvaluationError(format!($($arg)*)))
+    }}
+}
+
+macro_rules! enforce_number {
+    ($description:literal, $var:ident) => {
+        match $var {
+            Number(value) => value,
+            Literal(_) => error!("the {} is not supported for string literals", $description),
+        }
+    };
+
+    ($description:literal, $var1:ident, $var2:ident) => {
+        (
+            match $var1 {
+                Number(value) => value,
+                Literal(_) => error!("the {} is not supported for string literals", $description),
+            },
+            match $var2 {
+                Number(value) => value,
+                Literal(_) => error!("the {} is not supported for string literals", $description),
+            },
+        )
+    };
+}
+
 type VariableDict = HashMap<String, f64>;
+
+#[derive(Debug, PartialEq)]
+pub enum Value {
+    Number(f64),
+    Literal(String),
+}
+
+impl fmt::Display for Value {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Number(x) => write!(f, "{}", x),
+            Self::Literal(x) => write!(f, "{}", x.quote()),
+        }
+    }
+}
+
+use Value::{Literal, Number};
 
 impl Formula {
     pub fn new(input: &str) -> Result<Self, FormulaError> {
@@ -42,77 +89,88 @@ impl Formula {
         Ok(Self { parser })
     }
 
-    pub fn eval(&self) -> Result<f64, FormulaError> {
+    pub fn eval(&self) -> Result<Value, FormulaError> {
         self.eval_internal(None)
     }
 
-    pub fn eval_with(&self, vars: &VariableDict) -> Result<f64, FormulaError> {
+    pub fn eval_with(&self, vars: &VariableDict) -> Result<Value, FormulaError> {
         self.eval_internal(Some(vars))
     }
 
-    fn eval_internal(&self, vars: Option<&VariableDict>) -> Result<f64, FormulaError> {
-        let mut stack: Vec<f64> = vec![];
+    fn eval_internal(&self, vars: Option<&VariableDict>) -> Result<Value, FormulaError> {
+        let mut stack: Vec<Value> = vec![];
         for item in self.parser.iter() {
             match item {
                 parser::ParseItem::Value(v) => match v {
-                    parser::Value::Number(value) => stack.push(*value),
-                    parser::Value::Literal(_) => stack.push(0.0),
+                    parser::Value::Number(value) => stack.push(Number(*value)),
+                    parser::Value::Literal(text) => stack.push(Literal(text.clone())),
                     parser::Value::Variable(name) => {
                         let var = var!(vars, name);
-                        stack.push(var);
+                        stack.push(Number(var));
                     }
                 },
                 parser::ParseItem::Operator(op) => match op {
                     parser::Operator::Add => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push(lhs + rhs);
+                        let (rhs, lhs) = enforce_number!("addition operator", rhs, lhs);
+                        stack.push(Number(lhs + rhs));
                     }
                     parser::Operator::Sub => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push(lhs - rhs);
+                        let (rhs, lhs) = enforce_number!("subtraction operator", rhs, lhs);
+                        stack.push(Number(lhs - rhs));
                     }
                     parser::Operator::Mul => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push(lhs * rhs);
+                        let (rhs, lhs) = enforce_number!("multiplication operator", rhs, lhs);
+                        stack.push(Number(lhs * rhs));
                     }
                     parser::Operator::Div => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push(lhs / rhs);
+                        let (rhs, lhs) = enforce_number!("division operator", rhs, lhs);
+                        stack.push(Number(lhs / rhs));
                     }
                     parser::Operator::Pow => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push(lhs.powf(rhs));
+                        let (rhs, lhs) = enforce_number!("power operator", rhs, lhs);
+
+                        stack.push(Number(lhs.powf(rhs)));
                     }
                     parser::Operator::Pos => {}
                     parser::Operator::Neg => {
                         let rhs = take!(stack);
-                        stack.push(-rhs);
+                        let rhs = enforce_number!("negation operator", rhs);
+                        stack.push(Number(-rhs));
                     }
                     parser::Operator::Fac => {
                         // all factorials larger than `170!` will overflow an `f64`
                         let lhs = take!(stack);
-                        stack.push(match lhs {
+                        let lhs = enforce_number!("factorial operator", lhs);
+                        stack.push(Number(match lhs {
                             _ if lhs < 0.0 => std::f64::NAN,
                             _ if lhs > 170.0 => std::f64::INFINITY,
                             _ => (1..=(lhs as u32)).fold(1.0, |a, b| a * b as f64),
-                        });
+                        }));
                     }
                 },
                 parser::ParseItem::Function(f, _) => match f {
                     parser::Function::Sqrt => {
                         let param = take!(stack);
-                        stack.push(param.sqrt());
+                        let param = enforce_number!("sqrt function", param);
+                        stack.push(Number(param.sqrt()));
                     }
                     parser::Function::Round => {
                         let precision = take!(stack);
                         let value = take!(stack);
+                        let (precision, value) =
+                            enforce_number!("round function", precision, value);
                         let factor = 10f64.powf(precision.trunc());
-                        stack.push((value * factor).round() / factor);
+                        stack.push(Number((value * factor).round() / factor));
                     }
                 },
             }
@@ -137,70 +195,70 @@ mod tests {
     #[test]
     fn evaluate_addition() {
         let formula = Formula::new("1 + 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), 3.0)
+        assert_eq!(formula.eval().unwrap(), Number(3.0));
     }
 
     #[test]
     fn evaluate_subtraction() {
         let formula = Formula::new("1 - 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), -1.0)
+        assert_eq!(formula.eval().unwrap(), Number(-1.0));
     }
 
     #[test]
     fn evaluate_multiplication() {
         let formula = Formula::new("1 * 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), 2.0)
+        assert_eq!(formula.eval().unwrap(), Number(2.0));
     }
 
     #[test]
     fn evaluate_division() {
         let formula = Formula::new("1 / 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), 0.5)
+        assert_eq!(formula.eval().unwrap(), Number(0.5));
     }
 
     #[test]
     fn evaluate_power() {
         let formula = Formula::new("2 ^ 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), 4.0)
+        assert_eq!(formula.eval().unwrap(), Number(4.0));
     }
 
     #[test]
     fn evaluate_non_negation() {
         let formula = Formula::new("+ 1").unwrap();
-        assert_eq!(formula.eval().unwrap(), 1.0)
+        assert_eq!(formula.eval().unwrap(), Number(1.0));
     }
 
     #[test]
     fn evaluate_negation() {
         let formula = Formula::new("- 1").unwrap();
-        assert_eq!(formula.eval().unwrap(), -1.0)
+        assert_eq!(formula.eval().unwrap(), Number(-1.0));
     }
 
     #[test]
     fn evaluate_factorial() {
         let formula = Formula::new("3 !").unwrap();
-        assert_eq!(formula.eval().unwrap(), 6.0)
+        assert_eq!(formula.eval().unwrap(), Number(6.0));
     }
 
     #[test]
     fn evaluate_sqrt() {
         let formula = Formula::new("sqrt(4)").unwrap();
-        assert_eq!(formula.eval().unwrap(), 2.0)
+        assert_eq!(formula.eval().unwrap(), Number(2.0));
     }
 
     #[test]
     fn evaluate_round() {
         let formula = Formula::new("round(1.0001, 2)").unwrap();
-        assert_eq!(formula.eval().unwrap(), 1.0);
+        assert_eq!(formula.eval().unwrap(), Number(1.0));
 
         let formula = Formula::new("round(3.141592, 4)").unwrap();
-        assert_eq!(formula.eval().unwrap(), 3.1416);
+        assert_eq!(formula.eval().unwrap(), Number(3.1416));
     }
 
     #[test]
     fn evaluate_complex_expression() {
         let formula = Formula::new("sqrt(3*3 + (6/3+2)*4) - 1").unwrap();
-        assert_eq!(formula.eval().unwrap(), 4.0)
+        assert_eq!(formula.eval().unwrap(), Number(4.0));
     }
 
     #[test]
@@ -211,7 +269,13 @@ mod tests {
             .collect();
         let formula = Formula::new("a + b * c").unwrap();
         let result = formula.eval_with(&vars).unwrap();
-        assert_eq!(result, 7.0)
+        assert_eq!(result, Number(7.0));
+    }
+
+    #[test]
+    fn evaluate_literal() {
+        let formula = Formula::new(r#""Hello, World!""#).unwrap();
+        assert_eq!(formula.eval().unwrap(), Literal("Hello, World!".to_owned()));
     }
 
     proptest! {
@@ -229,7 +293,7 @@ mod tests {
             }
 
             let formula = Formula::new(&infix_str).unwrap();
-            formula.eval_with(&vars).unwrap();
+            let _ = formula.eval_with(&vars);
         }
     }
 }
