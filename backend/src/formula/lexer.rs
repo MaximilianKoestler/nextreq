@@ -404,8 +404,6 @@ mod tests {
                 .flat_map(|(token, space)| once(token.to_string()).chain(once(space.clone())))
                 .join("");
 
-            println!("{}", token_str);
-
             let expected: Vec<_> = input
                 .into_iter()
                 .map(|(token, _)| token)
