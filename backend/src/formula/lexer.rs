@@ -3,6 +3,7 @@ use std::ops::Deref;
 use std::str;
 
 use super::error::FormulaError;
+use super::number::{Number, ParseError};
 use super::quoted_string::Quotable;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -49,7 +50,7 @@ impl fmt::Display for Bracket {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    Number(f64),
+    Number(Number),
     Literal(String),
     Identifier(String),
     Operator(Operator),
@@ -167,10 +168,10 @@ impl Lexer {
         Ok(Self { tokens })
     }
 
-    fn get_number(it: &mut str::Chars) -> Result<f64, FormulaError> {
+    fn get_number(it: &mut str::Chars) -> Result<Number, FormulaError> {
         it.take_prefix(|c| c.is_ascii_digit() || *c == '.')
             .parse()
-            .map_err(|err: std::num::ParseFloatError| FormulaError::LexerError(err.to_string()))
+            .map_err(|err: ParseError| FormulaError::LexerError(err.to_string()))
     }
 
     fn get_literal<'a>(it: &'a mut str::Chars) -> Result<&'a str, FormulaError> {
@@ -256,7 +257,7 @@ mod tests {
 
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             prop_oneof![
-                any::<f64>().prop_map(Self::Number),
+                any::<Number>().prop_map(Self::Number),
                 literal_strategy().prop_map(Self::Literal),
                 identifier_strategy().prop_map(Self::Identifier),
                 any::<Operator>().prop_map(Self::Operator),
@@ -300,7 +301,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn tokenize_number(value: f64, spaces in whitespace_strategy()) {
+        fn tokenize_number(value: Number, spaces in whitespace_strategy()) {
             let lexer = Lexer::new(&format!("{}{}", value, spaces)).unwrap();
 
             let mut expected = vec![Token::Number(value.abs())];
@@ -332,8 +333,8 @@ mod tests {
     proptest! {
         #[test]
         fn tokenize_simple_expression(
-            lhs: f64,
-            rhs: f64,
+            lhs: Number,
+            rhs: Number,
             op: Operator,
             spaces in whitespace_strategy(),
         ) {
@@ -368,21 +369,21 @@ mod tests {
     fn tokenize_complex_expression() {
         let lexer = Lexer::new("0+ fn3(1.5 + 10* -200, 5)/3^你好! \"Hi\"").unwrap();
         let expected = vec![
-            Token::Number(0.0),
+            Token::Number(0.0.into()),
             Token::Operator(Operator::Plus),
             Token::Identifier("fn3".to_owned()),
             Token::Bracket(Bracket::RoundOpen),
-            Token::Number(1.5),
+            Token::Number(1.5.into()),
             Token::Operator(Operator::Plus),
-            Token::Number(10.0),
+            Token::Number(10.0.into()),
             Token::Operator(Operator::Star),
             Token::Operator(Operator::Minus),
-            Token::Number(200.0),
+            Token::Number(200.0.into()),
             Token::Operator(Operator::Comma),
-            Token::Number(5.0),
+            Token::Number(5.0.into()),
             Token::Bracket(Bracket::RoundClose),
             Token::Operator(Operator::Slash),
-            Token::Number(3.0),
+            Token::Number(3.0.into()),
             Token::Operator(Operator::Caret),
             Token::Identifier("你好".to_owned()),
             Token::Operator(Operator::ExclamationMark),

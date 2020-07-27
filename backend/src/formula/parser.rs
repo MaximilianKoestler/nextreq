@@ -3,7 +3,7 @@ use std::ops::Deref;
 
 use super::error::FormulaError;
 use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, Token};
-use super::quoted_string::Quotable;
+use super::number::Number;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
@@ -129,7 +129,9 @@ impl Parser {
         let mut result = vec![];
 
         match it.next() {
-            Some(Token::Number(value)) => result.push(ParseItem::Value(Value::Number(*value))),
+            Some(Token::Number(value)) => {
+                result.push(ParseItem::Value(Value::Number(value.into())))
+            }
             Some(Token::Literal(text)) => {
                 result.push(ParseItem::Value(Value::Literal(text.clone())))
             }
@@ -271,6 +273,7 @@ impl Deref for Parser {
 
 #[cfg(test)]
 pub mod tests {
+    use super::super::quoted_string::Quotable;
     use super::*;
     use itertools::Itertools;
     use proptest::prelude::*;
@@ -327,7 +330,7 @@ pub mod tests {
 
         pub fn infix(&self) -> Vec<Token> {
             match self {
-                Self::Number(value) => vec![Token::Number(*value)],
+                Self::Number(value) => vec![Token::Number(value.into())],
                 Self::Literal(value) => vec![Token::Literal(value.clone())],
                 Self::Variable(name) => vec![Token::Identifier(name.clone())],
                 Self::Expression(lhs, operator, rhs) => match (lhs.is_some(), rhs.is_some()) {
@@ -530,7 +533,7 @@ pub mod tests {
     fn parse_invalid() {
         assert!(Parser::new(&vec![Token::Operator(LexerOperator::Plus)]).is_err());
         assert!(Parser::new(&vec![
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Bracket(LexerBracket::RoundClose)
         ])
         .is_err());
@@ -538,8 +541,8 @@ pub mod tests {
 
     proptest! {
         #[test]
-        fn parse_value(value: f64) {
-            let tokens = vec![Token::Number(value)];
+        fn parse_value(value: Number) {
+            let tokens = vec![Token::Number(value.clone())];
             let parser = Parser::new(&tokens).unwrap();
             prop_assert_eq!(parser.postfix(), value.to_string());
         }
@@ -568,7 +571,7 @@ pub mod tests {
     fn parse_bracket_value() {
         let tokens = vec![
             Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
         ];
         let parser = Parser::new(&tokens).unwrap();
@@ -577,7 +580,7 @@ pub mod tests {
 
     proptest! {
         #[test]
-        fn parse_binary_expression(lhs: f64, rhs: f64, op in binary_infix_operator()) {
+        fn parse_binary_expression(lhs: Number, rhs: Number, op in binary_infix_operator()) {
             let expected = format!("{} {} {}", lhs, rhs, op);
 
             let tokens = vec![
@@ -593,7 +596,7 @@ pub mod tests {
 
     proptest! {
         #[test]
-        fn parse_unary_prefix_expression(rhs: f64, op in unary_prefix_operator()) {
+        fn parse_unary_prefix_expression(rhs: Number, op in unary_prefix_operator()) {
             let expected = format!("{} {}", rhs, unary_operator_str(&op));
 
             let tokens = vec![
@@ -608,7 +611,7 @@ pub mod tests {
 
     proptest! {
         #[test]
-        fn parse_unary_postfix_expression(lhs: f64, op in unary_postfix_operator()) {
+        fn parse_unary_postfix_expression(lhs: Number, op in unary_postfix_operator()) {
             let expected = format!("{} {}", lhs, &op);
 
             let tokens = vec![
@@ -624,43 +627,43 @@ pub mod tests {
     #[test]
     fn parse_complex_expressions() {
         let parser = Parser::new(&vec![
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Operator(LexerOperator::Plus),
-            Token::Number(2.0),
+            Token::Number(2.0.into()),
             Token::Operator(LexerOperator::Minus),
-            Token::Number(3.0),
+            Token::Number(3.0.into()),
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 + 3 -"));
 
         let parser = Parser::new(&vec![
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Operator(LexerOperator::Plus),
-            Token::Number(2.0),
+            Token::Number(2.0.into()),
             Token::Operator(LexerOperator::Star),
-            Token::Number(3.0),
+            Token::Number(3.0.into()),
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 3 * +"));
 
         let parser = Parser::new(&vec![
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Operator(LexerOperator::Star),
-            Token::Number(2.0),
+            Token::Number(2.0.into()),
             Token::Operator(LexerOperator::Minus),
-            Token::Number(3.0),
+            Token::Number(3.0.into()),
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 * 3 -"));
 
         let parser = Parser::new(&vec![
             Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Operator(LexerOperator::Plus),
-            Token::Number(2.0),
+            Token::Number(2.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
             Token::Operator(LexerOperator::Star),
-            Token::Number(3.0),
+            Token::Number(3.0.into()),
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 + 3 *"));
@@ -671,7 +674,7 @@ pub mod tests {
         let parser = Parser::new(&vec![
             Token::Identifier("sqrt".to_owned()),
             Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
         ])
         .unwrap();
@@ -680,9 +683,9 @@ pub mod tests {
         let parser = Parser::new(&vec![
             Token::Identifier("sqrt".to_owned()),
             Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Operator(LexerOperator::Plus),
-            Token::Number(2.0),
+            Token::Number(2.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
         ])
         .unwrap();
@@ -694,9 +697,9 @@ pub mod tests {
         let parser = Parser::new(&vec![
             Token::Identifier("round".to_owned()),
             Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.5),
+            Token::Number(1.5.into()),
             Token::Operator(LexerOperator::Comma),
-            Token::Number(2.0),
+            Token::Number(2.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
         ])
         .unwrap();
@@ -706,10 +709,10 @@ pub mod tests {
             Token::Identifier("round".to_owned()),
             Token::Bracket(LexerBracket::RoundOpen),
             Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.5),
+            Token::Number(1.5.into()),
             Token::Bracket(LexerBracket::RoundClose),
             Token::Operator(LexerOperator::Comma),
-            Token::Number(2.0),
+            Token::Number(2.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
         ])
         .unwrap();
@@ -721,9 +724,9 @@ pub mod tests {
         assert!(Parser::new(&vec![
             Token::Identifier("sqrt".to_owned()),
             Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Operator(LexerOperator::Comma),
-            Token::Number(2.0),
+            Token::Number(2.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
         ])
         .is_err());
@@ -731,11 +734,11 @@ pub mod tests {
         assert!(Parser::new(&vec![
             Token::Identifier("round".to_owned()),
             Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Operator(LexerOperator::Comma),
-            Token::Number(2.0),
+            Token::Number(2.0.into()),
             Token::Operator(LexerOperator::Comma),
-            Token::Number(3.0),
+            Token::Number(3.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
         ])
         .is_err());
@@ -743,7 +746,7 @@ pub mod tests {
         assert!(Parser::new(&vec![
             Token::Identifier("round".to_owned()),
             Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0),
+            Token::Number(1.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
         ])
         .is_err());
@@ -756,7 +759,7 @@ pub mod tests {
             Token::Operator(LexerOperator::Plus),
             Token::Literal("def".to_owned()),
             Token::Operator(LexerOperator::Minus),
-            Token::Number(3.0),
+            Token::Number(3.0.into()),
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!(r#""abc" "def" + 3 -"#));

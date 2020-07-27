@@ -1,5 +1,6 @@
 pub mod error;
 pub mod lexer;
+mod number;
 pub mod parser;
 mod quoted_string;
 
