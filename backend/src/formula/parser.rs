@@ -3,11 +3,11 @@ use std::ops::Deref;
 
 use super::error::FormulaError;
 use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, Token};
-use super::number::Number;
+use super::numeric::Numeric;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Number(Number),
+    Number(Numeric),
     Literal(String),
     Variable(String),
 }
@@ -289,7 +289,7 @@ pub mod tests {
     }
 
     pub enum TokenTree {
-        Number(Number),
+        Number(Numeric),
         Literal(String),
         Variable(String),
         Expression(
@@ -549,7 +549,7 @@ pub mod tests {
 
     proptest! {
         #[test]
-        fn parse_value(value: Number) {
+        fn parse_value(value: Numeric) {
             let tokens = vec![Token::Number(value.clone())];
             let parser = Parser::new(&tokens).unwrap();
             prop_assert_eq!(parser.postfix(), value.to_string());
@@ -588,7 +588,7 @@ pub mod tests {
 
     proptest! {
         #[test]
-        fn parse_binary_expression(lhs: Number, rhs: Number, op in binary_infix_operator()) {
+        fn parse_binary_expression(lhs: Numeric, rhs: Numeric, op in binary_infix_operator()) {
             let expected = format!("{} {} {}", lhs, rhs, op);
 
             let tokens = vec![
@@ -604,7 +604,7 @@ pub mod tests {
 
     proptest! {
         #[test]
-        fn parse_unary_prefix_expression(rhs: Number, op in unary_prefix_operator()) {
+        fn parse_unary_prefix_expression(rhs: Numeric, op in unary_prefix_operator()) {
             let expected = format!("{} {}", rhs, unary_operator_str(&op));
 
             let tokens = vec![
@@ -619,7 +619,7 @@ pub mod tests {
 
     proptest! {
         #[test]
-        fn parse_unary_postfix_expression(lhs: Number, op in unary_postfix_operator()) {
+        fn parse_unary_postfix_expression(lhs: Numeric, op in unary_postfix_operator()) {
             let expected = format!("{} {}", lhs, &op);
 
             let tokens = vec![

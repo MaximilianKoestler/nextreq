@@ -3,7 +3,7 @@ use std::ops::Deref;
 use std::str;
 
 use super::error::FormulaError;
-use super::number::{Number, ParseError};
+use super::numeric::{Numeric, ParseError};
 use super::quoted_string::Quotable;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,7 +50,7 @@ impl fmt::Display for Bracket {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {
-    Number(Number),
+    Number(Numeric),
     Literal(String),
     Identifier(String),
     Operator(Operator),
@@ -168,7 +168,7 @@ impl Lexer {
         Ok(Self { tokens })
     }
 
-    fn get_number(it: &mut str::Chars) -> Result<Number, FormulaError> {
+    fn get_number(it: &mut str::Chars) -> Result<Numeric, FormulaError> {
         it.take_prefix(|c| c.is_ascii_digit() || *c == '.')
             .parse()
             .map_err(|err: ParseError| FormulaError::LexerError(err.to_string()))
@@ -257,7 +257,7 @@ mod tests {
 
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             prop_oneof![
-                any::<Number>().prop_map(Self::Number),
+                any::<Numeric>().prop_map(Self::Number),
                 literal_strategy().prop_map(Self::Literal),
                 identifier_strategy().prop_map(Self::Identifier),
                 any::<Operator>().prop_map(Self::Operator),
@@ -301,7 +301,7 @@ mod tests {
 
     proptest! {
         #[test]
-        fn tokenize_number(value: Number, spaces in whitespace_strategy()) {
+        fn tokenize_number(value: Numeric, spaces in whitespace_strategy()) {
             let lexer = Lexer::new(&format!("{}{}", value, spaces)).unwrap();
 
             let mut expected = vec![Token::Number(value.abs())];
@@ -333,8 +333,8 @@ mod tests {
     proptest! {
         #[test]
         fn tokenize_simple_expression(
-            lhs: Number,
-            rhs: Number,
+            lhs: Numeric,
+            rhs: Numeric,
             op: Operator,
             spaces in whitespace_strategy(),
         ) {

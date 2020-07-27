@@ -9,7 +9,7 @@ fn benchmark_many_additions(c: &mut Criterion) {
 
     let part = vec![
         Token::Operator(Operator::Plus),
-        Token::Number(std::f64::consts::PI),
+        Token::Number(std::f64::consts::PI.into()),
     ];
     let input: Vec<Token> = repeat(part.iter()).take(n).flatten().cloned().collect();
 
