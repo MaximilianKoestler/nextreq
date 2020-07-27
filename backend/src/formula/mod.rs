@@ -222,6 +222,11 @@ impl Formula {
                         let param = enforce_number!("sqrt function", param);
                         stack.push(Number(param.sqrt()));
                     }
+                    parser::Function::Abs => {
+                        let param = take!(stack);
+                        let param = enforce_number!("abs function", param);
+                        stack.push(Number(param.abs()));
+                    }
                     parser::Function::Round => {
                         let precision = take!(stack);
                         let value = take!(stack);
@@ -310,6 +315,15 @@ mod tests {
     fn evaluate_sqrt() {
         let formula = Formula::new("sqrt(4)").unwrap();
         assert_eq!(formula.eval().unwrap(), Number(2.0));
+    }
+
+    #[test]
+    fn evaluate_abs() {
+        let formula = Formula::new("abs(4)").unwrap();
+        assert_eq!(formula.eval().unwrap(), Number(4.0));
+
+        let formula = Formula::new("abs(-4)").unwrap();
+        assert_eq!(formula.eval().unwrap(), Number(4.0));
     }
 
     #[test]

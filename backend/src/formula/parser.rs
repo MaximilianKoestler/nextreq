@@ -53,6 +53,7 @@ impl fmt::Display for Operator {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Function {
     Sqrt,
+    Abs,
     Round,
 }
 
@@ -60,6 +61,7 @@ impl fmt::Display for Function {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let op = match self {
             Self::Sqrt => "sqrt",
+            Self::Abs => "abs",
             Self::Round => "round",
         };
         write!(f, "{}", op)
@@ -257,6 +259,7 @@ impl Parser {
     fn function_item(name: &String) -> Result<(Function, u32), FormulaError> {
         Ok(match name.to_lowercase().as_str() {
             "sqrt" => (Function::Sqrt, 1),
+            "abs" => (Function::Abs, 1),
             "round" => (Function::Round, 2),
             _ => error!("unsupported function: {}", name),
         })
@@ -465,7 +468,12 @@ pub mod tests {
     }
 
     fn function() -> BoxedStrategy<(String, usize)> {
-        prop_oneof![Just(("sqrt".to_owned(), 1)), Just(("round".to_owned(), 2)),].boxed()
+        prop_oneof![
+            Just(("sqrt".to_owned(), 1)),
+            Just(("abs".to_owned(), 1)),
+            Just(("round".to_owned(), 2)),
+        ]
+        .boxed()
     }
 
     prop_compose! {
@@ -679,6 +687,15 @@ pub mod tests {
         ])
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 sqrt"));
+
+        let parser = Parser::new(&vec![
+            Token::Identifier("abs".to_owned()),
+            Token::Bracket(LexerBracket::RoundOpen),
+            Token::Number(1.0.into()),
+            Token::Bracket(LexerBracket::RoundClose),
+        ])
+        .unwrap();
+        assert_eq!(parser.postfix(), format!("1 abs"));
 
         let parser = Parser::new(&vec![
             Token::Identifier("sqrt".to_owned()),
