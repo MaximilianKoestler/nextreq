@@ -289,7 +289,7 @@ pub mod tests {
     }
 
     pub enum TokenTree {
-        Number(f64),
+        Number(Number),
         Literal(String),
         Variable(String),
         Expression(
@@ -333,7 +333,7 @@ pub mod tests {
 
         pub fn infix(&self) -> Vec<Token> {
             match self {
-                Self::Number(value) => vec![Token::Number(value.into())],
+                Self::Number(value) => vec![Token::Number(value.clone())],
                 Self::Literal(value) => vec![Token::Literal(value.clone())],
                 Self::Variable(name) => vec![Token::Identifier(name.clone())],
                 Self::Expression(lhs, operator, rhs) => match (lhs.is_some(), rhs.is_some()) {
@@ -520,7 +520,7 @@ pub mod tests {
 
         fn arbitrary_with(_: Self::Parameters) -> Self::Strategy {
             let leaf = prop_oneof![
-                (0..100u32).prop_map(|v| TokenTree::Number(v as f64)),
+                (0..100u32).prop_map(|v| TokenTree::Number(v.into())),
                 r"[[:lower:]]{3}".prop_map(TokenTree::Literal),
                 r"[[:lower:]]{1}".prop_map(TokenTree::Variable),
             ];

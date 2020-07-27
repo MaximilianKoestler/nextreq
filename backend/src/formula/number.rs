@@ -65,6 +65,14 @@ mod tests {
         }
     }
 
+    impl From<u32> for Number {
+        fn from(value: u32) -> Self {
+            Number {
+                value: value as f64,
+            }
+        }
+    }
+
     impl Arbitrary for Number {
         type Parameters = ();
         type Strategy = BoxedStrategy<Self>;
