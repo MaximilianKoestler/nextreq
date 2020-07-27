@@ -2,7 +2,7 @@ use std::{cmp, fmt, ops, str};
 
 pub type ParseError = std::num::ParseFloatError;
 
-#[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
+#[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Numeric {
     value: f64,
 }

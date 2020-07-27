@@ -128,7 +128,7 @@ mod tests {
     proptest! {
         #[test]
         fn value_property_keeps_value(value: Numeric, unit: Option<String>) {
-            let p = ValueProperty::new(Number(value), unit.as_deref());
+            let p = ValueProperty::new(Number(value.clone()), unit.as_deref());
             prop_assert_eq!(p.value().unwrap(), Number(value));
         }
     }

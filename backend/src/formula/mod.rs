@@ -229,7 +229,7 @@ impl Formula {
                         let (precision, value) =
                             enforce_number!("round function", precision, value);
                         let factor = Numeric::from(10.0).pow(&precision.trunc());
-                        stack.push(Number((value * factor).round() / factor));
+                        stack.push(Number((value * factor.clone()).round() / factor));
                     }
                 },
             }
@@ -345,10 +345,11 @@ mod tests {
 
     #[test]
     fn evaluate_var() {
-        let vars: VariableDict = [("a", 1.0.into()), ("b", 2.0.into()), ("c", 3.0.into())]
-            .iter()
-            .map(|(k, v)| (k.to_owned().to_owned(), *v))
-            .collect();
+        let mut vars: VariableDict = VariableDict::new();
+        vars.insert("a".to_owned(), 1.0.into());
+        vars.insert("b".to_owned(), 2.0.into());
+        vars.insert("c".to_owned(), 3.0.into());
+
         let formula = Formula::new("a + b * c").unwrap();
         let result = formula.eval_with(&vars).unwrap();
         assert_eq!(result, Number(7.0.into()));
