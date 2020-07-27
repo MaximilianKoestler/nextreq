@@ -1,7 +1,6 @@
-use std::collections::HashMap;
 use std::io::{self, Write};
 
-use nextreq::formula::Formula;
+use nextreq::formula::{Formula, VariableDict};
 
 fn prompt(text: &str) -> Option<String> {
     println!("{}:", text);
@@ -20,7 +19,7 @@ fn prompt(text: &str) -> Option<String> {
 }
 
 fn main() {
-    let mut vars: HashMap<String, f64> = HashMap::new();
+    let mut vars: VariableDict = VariableDict::new();
 
     loop {
         println!();

@@ -11,6 +11,7 @@ use std::iter::repeat;
 use std::ops::{Add, Mul};
 
 use error::FormulaError;
+use numeric::Numeric;
 use quoted_string::Quotable;
 
 pub struct Formula {
@@ -67,11 +68,11 @@ macro_rules! enforce_number {
     };
 }
 
-type VariableDict = HashMap<String, f64>;
+pub type VariableDict = HashMap<String, Numeric>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Number(f64),
+    Number(Numeric),
     Literal(String),
 }
 
@@ -121,7 +122,7 @@ impl Mul for Value {
                     return Ok(Literal(l));
                 }
 
-                let n = n as usize;
+                let n = n.into();
                 let single_length = l.len();
                 const MAXIMIUM_LENGTH: usize = 4096;
 
@@ -162,7 +163,7 @@ impl Formula {
         for item in self.parser.iter() {
             match item {
                 parser::ParseItem::Value(v) => match v {
-                    parser::Value::Number(value) => stack.push(Number(value.into())),
+                    parser::Value::Number(value) => stack.push(Number(value.clone())),
                     parser::Value::Literal(text) => stack.push(Literal(text.clone())),
                     parser::Value::Variable(name) => {
                         let var = var!(vars, name);
@@ -197,7 +198,7 @@ impl Formula {
                         let lhs = take!(stack);
                         let (rhs, lhs) = enforce_number!("power operator", rhs, lhs);
 
-                        stack.push(Number(lhs.powf(rhs)));
+                        stack.push(Number(lhs.pow(&rhs)));
                     }
                     parser::Operator::Pos => {}
                     parser::Operator::Neg => {
@@ -206,14 +207,9 @@ impl Formula {
                         stack.push(Number(-rhs));
                     }
                     parser::Operator::Fac => {
-                        // all factorials larger than `170!` will overflow an `f64`
                         let lhs = take!(stack);
                         let lhs = enforce_number!("factorial operator", lhs);
-                        stack.push(Number(match lhs {
-                            _ if lhs < 0.0 => std::f64::NAN,
-                            _ if lhs > 170.0 => std::f64::INFINITY,
-                            _ => (1..=(lhs as u32)).fold(1.0, |a, b| a * b as f64),
-                        }));
+                        stack.push(Number(lhs.factorial()));
                     }
                 },
                 parser::ParseItem::Function(f, _) => match f {
@@ -232,7 +228,7 @@ impl Formula {
                         let value = take!(stack);
                         let (precision, value) =
                             enforce_number!("round function", precision, value);
-                        let factor = 10f64.powf(precision.trunc());
+                        let factor = Numeric::from(10.0).pow(&precision.trunc());
                         stack.push(Number((value * factor).round() / factor));
                     }
                 },
@@ -257,99 +253,105 @@ mod tests {
 
     #[test]
     fn value_ordering() {
-        assert!(Number(3.0) > Number(2.0));
-        assert_eq!(Number(3.0).partial_cmp(&Literal("a".to_owned())), None);
-        assert_eq!(Literal("a".to_owned()).partial_cmp(&Number(3.0)), None);
+        assert!(Number(3.0.into()) > Number(2.0.into()));
+        assert_eq!(
+            Number(3.0.into()).partial_cmp(&Literal("a".to_owned())),
+            None
+        );
+        assert_eq!(
+            Literal("a".to_owned()).partial_cmp(&Number(3.0.into())),
+            None
+        );
         assert!(Literal("b".to_owned()) > Literal("a".to_owned()));
     }
 
     #[test]
     fn evaluate_addition() {
         let formula = Formula::new("1 + 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(3.0));
+        assert_eq!(formula.eval().unwrap(), Number(3.0.into()));
     }
 
     #[test]
     fn evaluate_subtraction() {
         let formula = Formula::new("1 - 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(-1.0));
+        assert_eq!(formula.eval().unwrap(), Number(Numeric::from(-1.0)));
     }
 
     #[test]
     fn evaluate_multiplication() {
         let formula = Formula::new("1 * 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(2.0));
+        assert_eq!(formula.eval().unwrap(), Number(2.0.into()));
     }
 
     #[test]
     fn evaluate_division() {
         let formula = Formula::new("1 / 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(0.5));
+        assert_eq!(formula.eval().unwrap(), Number(0.5.into()));
     }
 
     #[test]
     fn evaluate_power() {
         let formula = Formula::new("2 ^ 2").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(4.0));
+        assert_eq!(formula.eval().unwrap(), Number(4.0.into()));
     }
 
     #[test]
     fn evaluate_non_negation() {
         let formula = Formula::new("+ 1").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(1.0));
+        assert_eq!(formula.eval().unwrap(), Number(1.0.into()));
     }
 
     #[test]
     fn evaluate_negation() {
         let formula = Formula::new("- 1").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(-1.0));
+        assert_eq!(formula.eval().unwrap(), Number(Numeric::from(-1.0)));
     }
 
     #[test]
     fn evaluate_factorial() {
         let formula = Formula::new("3 !").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(6.0));
+        assert_eq!(formula.eval().unwrap(), Number(6.0.into()));
     }
 
     #[test]
     fn evaluate_sqrt() {
         let formula = Formula::new("sqrt(4)").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(2.0));
+        assert_eq!(formula.eval().unwrap(), Number(2.0.into()));
     }
 
     #[test]
     fn evaluate_abs() {
         let formula = Formula::new("abs(4)").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(4.0));
+        assert_eq!(formula.eval().unwrap(), Number(4.0.into()));
 
         let formula = Formula::new("abs(-4)").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(4.0));
+        assert_eq!(formula.eval().unwrap(), Number(4.0.into()));
     }
 
     #[test]
     fn evaluate_round() {
         let formula = Formula::new("round(1.0001, 2)").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(1.0));
+        assert_eq!(formula.eval().unwrap(), Number(1.0.into()));
 
         let formula = Formula::new("round(3.141592, 4)").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(3.1416));
+        assert_eq!(formula.eval().unwrap(), Number(3.1416.into()));
     }
 
     #[test]
     fn evaluate_complex_expression() {
         let formula = Formula::new("sqrt(3*3 + (6/3+2)*4) - 1").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(4.0));
+        assert_eq!(formula.eval().unwrap(), Number(4.0.into()));
     }
 
     #[test]
     fn evaluate_var() {
-        let vars: HashMap<String, f64> = [("a", 1.0), ("b", 2.0), ("c", 3.0)]
+        let vars: VariableDict = [("a", 1.0.into()), ("b", 2.0.into()), ("c", 3.0.into())]
             .iter()
             .map(|(k, v)| (k.to_owned().to_owned(), *v))
             .collect();
         let formula = Formula::new("a + b * c").unwrap();
         let result = formula.eval_with(&vars).unwrap();
-        assert_eq!(result, Number(7.0));
+        assert_eq!(result, Number(7.0.into()));
     }
 
     #[test]
@@ -431,7 +433,7 @@ mod tests {
 
             let mut vars = VariableDict::new();
             for var in token_tree.variables() {
-                vars.insert(var, 0.0);
+                vars.insert(var, 0.0.into());
             }
 
             let formula = Formula::new(&infix_str).unwrap();
