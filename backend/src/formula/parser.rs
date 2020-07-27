@@ -7,7 +7,7 @@ use super::number::Number;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {
-    Number(f64),
+    Number(Number),
     Literal(String),
     Variable(String),
 }
@@ -132,7 +132,7 @@ impl Parser {
 
         match it.next() {
             Some(Token::Number(value)) => {
-                result.push(ParseItem::Value(Value::Number(value.into())))
+                result.push(ParseItem::Value(Value::Number(value.clone())))
             }
             Some(Token::Literal(text)) => {
                 result.push(ParseItem::Value(Value::Literal(text.clone())))

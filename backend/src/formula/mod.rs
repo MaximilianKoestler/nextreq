@@ -162,7 +162,7 @@ impl Formula {
         for item in self.parser.iter() {
             match item {
                 parser::ParseItem::Value(v) => match v {
-                    parser::Value::Number(value) => stack.push(Number(*value)),
+                    parser::Value::Number(value) => stack.push(Number(value.into())),
                     parser::Value::Literal(text) => stack.push(Literal(text.clone())),
                     parser::Value::Variable(name) => {
                         let var = var!(vars, name);
