@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::fmt;
 use std::iter::repeat;
 use std::ops::{Add, Mul};
+use std::time::{Duration, Instant};
 
 use error::FormulaError;
 use numeric::Numeric;
@@ -159,8 +160,15 @@ impl Formula {
     }
 
     fn eval_internal(&self, vars: Option<&VariableDict>) -> Result<Value, FormulaError> {
+        let start = Instant::now();
+        let timeout = Duration::from_millis(500);
+
         let mut stack: Vec<Value> = vec![];
         for item in self.parser.iter() {
+            if start.elapsed() > timeout {
+                error!("timeout exceeded ({:?} out of {:?}", start.elapsed(), timeout);
+            }
+
             match item {
                 parser::ParseItem::Value(v) => match v {
                     parser::Value::Number(value) => stack.push(Number(value.clone())),
@@ -250,7 +258,6 @@ impl Formula {
 mod tests {
     use super::*;
     use proptest::prelude::*;
-    use std::time::{Duration, Instant};
 
     #[test]
     fn value_ordering() {
