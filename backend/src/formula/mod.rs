@@ -250,6 +250,7 @@ impl Formula {
 mod tests {
     use super::*;
     use proptest::prelude::*;
+    use std::time::{Duration, Instant};
 
     #[test]
     fn value_ordering() {
@@ -439,6 +440,38 @@ mod tests {
 
             let formula = Formula::new(&infix_str).unwrap();
             let _ = formula.eval_with(&vars);
+        }
+    }
+
+    #[test]
+    #[ignore]
+    fn expression_performance_bound() {
+        let token_strategy = any::<parser::tests::TokenTree>();
+        let mut runner = proptest::test_runner::TestRunner::default();
+
+        let mut results = vec![];
+        for _ in 0..4096 {
+            let token_tree = token_strategy.new_tree(&mut runner).unwrap().current();
+            let infix_str = token_tree.infix_str();
+            let formula = Formula::new(&infix_str).unwrap();
+
+            let mut vars = VariableDict::new();
+            for var in token_tree.variables() {
+                vars.insert(var, 0.0.into());
+            }
+
+            let start = Instant::now();
+            let _ = formula.eval_with(&vars);
+            let duration = start.elapsed();
+
+            let score = duration.as_nanos() / infix_str.len() as u128;
+            results.push((infix_str, duration, score));
+        }
+
+        results.sort_by_key(|(_, _, score)| *score);
+        for (index, top) in results.iter().rev().take(10).enumerate() {
+            let (infix, duration, _) = top;
+            println!("{:3}: {:?} <- {:?}", index, duration, infix);
         }
     }
 }
