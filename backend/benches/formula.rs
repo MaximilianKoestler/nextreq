@@ -41,10 +41,20 @@ fn benchmark_example_term(c: &mut Criterion) {
     });
 }
 
+fn benchmark_sqrt(c: &mut Criterion) {
+    let input = "sqrt(sqrt(2))";
+
+    c.bench_function(&format!("evaluate sqrt"), |b| {
+        let formula = formula::Formula::new(black_box(&input)).unwrap();
+        b.iter(|| formula.eval().unwrap())
+    });
+}
+
 criterion_group! {
     name = benches;
     config = Criterion::default();
     targets = benchmark_many_additions,
               benchmark_example_term,
+              benchmark_sqrt,
 }
 criterion_main!(benches);
