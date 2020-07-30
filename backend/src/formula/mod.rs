@@ -166,7 +166,11 @@ impl Formula {
         let mut stack: Vec<Value> = vec![];
         for item in self.parser.iter() {
             if start.elapsed() > timeout {
-                error!("timeout exceeded ({:?} out of {:?}", start.elapsed(), timeout);
+                error!(
+                    "timeout exceeded ({:?} out of {:?}",
+                    start.elapsed(),
+                    timeout
+                );
             }
 
             match item {
@@ -199,14 +203,14 @@ impl Formula {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
                         let (rhs, lhs) = enforce_number!("division operator", rhs, lhs);
-                        stack.push(Number(lhs / rhs));
+                        stack.push(Number((lhs / rhs)?));
                     }
                     parser::Operator::Pow => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
                         let (rhs, lhs) = enforce_number!("power operator", rhs, lhs);
 
-                        stack.push(Number(lhs.pow(&rhs)));
+                        stack.push(Number(lhs.pow(&rhs)?));
                     }
                     parser::Operator::Pos => {}
                     parser::Operator::Neg => {
@@ -217,14 +221,14 @@ impl Formula {
                     parser::Operator::Fac => {
                         let lhs = take!(stack);
                         let lhs = enforce_number!("factorial operator", lhs);
-                        stack.push(Number(lhs.factorial()));
+                        stack.push(Number(lhs.factorial()?));
                     }
                 },
                 parser::ParseItem::Function(f, _) => match f {
                     parser::Function::Sqrt => {
                         let param = take!(stack);
                         let param = enforce_number!("sqrt function", param);
-                        stack.push(Number(param.sqrt()));
+                        stack.push(Number(param.sqrt()?));
                     }
                     parser::Function::Abs => {
                         let param = take!(stack);
@@ -236,8 +240,7 @@ impl Formula {
                         let value = take!(stack);
                         let (precision, value) =
                             enforce_number!("round function", precision, value);
-                        let factor = Numeric::from(10.0).pow(&precision.trunc());
-                        stack.push(Number((value * factor.clone()).round() / factor));
+                        stack.push(Number(value.round(&precision)?));
                     }
                 },
             }
@@ -301,6 +304,9 @@ mod tests {
     fn evaluate_power() {
         let formula = Formula::new("2 ^ 2").unwrap();
         assert_eq!(formula.eval().unwrap(), Number(4.0.into()));
+
+        let formula = Formula::new("2 ^ -2").unwrap();
+        assert_eq!(formula.eval().unwrap(), Number(0.25.into()));
     }
 
     #[test]
@@ -325,6 +331,9 @@ mod tests {
     fn evaluate_sqrt() {
         let formula = Formula::new("sqrt(4)").unwrap();
         assert_eq!(formula.eval().unwrap(), Number(2.0.into()));
+
+        let formula = Formula::new("sqrt(-4)").unwrap();
+        assert!(formula.eval().is_err());
     }
 
     #[test]
@@ -341,8 +350,11 @@ mod tests {
         let formula = Formula::new("round(1.0001, 2)").unwrap();
         assert_eq!(formula.eval().unwrap(), Number(1.0.into()));
 
-        let formula = Formula::new("round(3.141592, 4)").unwrap();
-        assert_eq!(formula.eval().unwrap(), Number(3.1416.into()));
+        let formula = Formula::new("round(3.241592, 4)").unwrap();
+        assert_eq!(formula.eval().unwrap(), Number(3.2416.into()));
+
+        let formula = Formula::new("round(-1.551, 1)").unwrap();
+        assert_eq!(formula.eval().unwrap(), Number((-1.6).into()));
     }
 
     #[test]

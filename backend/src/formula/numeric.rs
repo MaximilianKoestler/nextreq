@@ -1,6 +1,20 @@
 use std::{cmp, fmt, ops, str};
 
+use super::error::FormulaError;
+
 pub type ParseError = std::num::ParseFloatError;
+
+macro_rules! build_err {
+    ($($arg:tt)*) => {{
+        FormulaError::NumericError(format!($($arg)*))
+    }}
+}
+
+macro_rules! error {
+    ($($arg:tt)*) => {{
+        return Err(build_err!($($arg)*));
+    }}
+}
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub struct Numeric {
@@ -20,33 +34,35 @@ impl Numeric {
         }
     }
 
-    pub fn round(&self) -> Self {
-        Self {
-            value: self.value.round(),
-        }
+    pub fn round(&self, precision: &Self) -> Result<Self, FormulaError> {
+        let factor = 10.0f64.powf(precision.value.trunc());
+        let rounded = (self.value * factor.clone()).round() / factor;
+        Ok(Self { value: rounded })
     }
 
-    pub fn sqrt(&self) -> Self {
-        Self {
+    pub fn sqrt(&self) -> Result<Self, FormulaError> {
+        if self.value < 0.0 {
+            error!("sqrt of negative numbers is not supported")
+        }
+        Ok(Self {
             value: self.value.sqrt(),
-        }
+        })
     }
 
-    pub fn pow(&self, rhs: &Self) -> Self {
-        Self {
+    pub fn pow(&self, rhs: &Self) -> Result<Self, FormulaError> {
+        Ok(Self {
             value: self.value.powf(rhs.value),
-        }
+        })
     }
 
-    pub fn factorial(&self) -> Self {
+    pub fn factorial(&self) -> Result<Self, FormulaError> {
         // all factorials larger than `170!` will overflow an `f64`
-        Self {
-            value: match self.value {
-                v if v < 0.0 => std::f64::NAN,
-                v if v > 170.0 => std::f64::INFINITY,
-                v => (1..=(v as u32)).fold(1.0, |a, b| a * b as f64),
-            },
-        }
+        let factorial = match self.value {
+            v if v < 0.0 => std::f64::NAN,
+            v if v > 170.0 => std::f64::INFINITY,
+            v => (1..=(v as u32)).fold(1.0, |a, b| a * b as f64),
+        };
+        Ok(Self { value: factorial })
     }
 }
 
@@ -123,11 +139,11 @@ impl ops::Mul for Numeric {
 }
 
 impl ops::Div for Numeric {
-    type Output = Self;
+    type Output = Result<Self, FormulaError>;
     fn div(self, rhs: Self) -> Self::Output {
-        Self {
+        Ok(Self {
             value: self.value / rhs.value,
-        }
+        })
     }
 }
 
