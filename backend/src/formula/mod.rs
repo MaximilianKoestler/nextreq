@@ -488,9 +488,12 @@ mod tests {
         }
 
         results.sort_by_key(|(_, _, score)| *score);
-        for (index, top) in results.iter().rev().take(10).enumerate() {
+        let sample_size = 10;
+
+        println!("\nSlowest {}:", sample_size);
+        for (index, top) in results.iter().rev().take(sample_size).enumerate() {
             let (infix, duration, _) = top;
-            println!("{:3}: {:?} <- {:?}", index, duration, infix);
+            println!("{:3}: {:?} <- {:?}", index + 1, duration, infix);
         }
     }
 }
