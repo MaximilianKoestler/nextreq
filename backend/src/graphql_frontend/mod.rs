@@ -8,10 +8,6 @@ pub use query::Query;
 
 pub type Schema = RootNode<'static, Query, EmptyMutation<Context>, EmptySubscription<Context>>;
 
-pub fn create_context() -> Context {
-    Context {}
-}
-
 pub fn create_schema() -> Schema {
     Schema::new(
         Query,

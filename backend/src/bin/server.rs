@@ -1,7 +1,8 @@
 use juniper_rocket_async::{graphiql_source, GraphQLRequest, GraphQLResponse};
 use rocket::{response::content, State};
 
-use nextreq::graphql_frontend::{create_context, create_schema, Context, Schema};
+use nextreq::graphql_frontend::{create_schema, Context, Schema};
+use nextreq::interactors::CalculatorInteractor;
 
 #[rocket::get("/")]
 fn graphiql() -> content::Html<String> {
@@ -25,4 +26,11 @@ async fn main() -> Result<(), rocket::error::Error> {
         .mount("/", rocket::routes![graphiql, post_graphql_handler])
         .launch()
         .await
+}
+
+fn create_context() -> Context {
+    let calculator_interactor = Box::leak(Box::new(CalculatorInteractor::new()));
+    Context {
+        calculator_view: calculator_interactor,
+    }
 }
