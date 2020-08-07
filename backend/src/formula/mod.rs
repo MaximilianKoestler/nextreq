@@ -27,20 +27,6 @@ macro_rules! take {
     };
 }
 
-macro_rules! var {
-    ($vars:ident, $name:ident) => {
-        ($vars)
-            .as_ref()
-            .map(|m| m.get($name))
-            .flatten()
-            .ok_or(FormulaError::EvaluationError(format!(
-                "variable {} not found",
-                $name
-            )))?
-            .clone();
-    };
-}
-
 macro_rules! error {
     ($($arg:tt)*) => {{
         return Err(FormulaError::EvaluationError(format!($($arg)*)))
@@ -160,6 +146,16 @@ impl Formula {
     }
 
     fn eval_internal(&self, vars: Option<&VariableDict>) -> Result<Value, FormulaError> {
+        // TODO: move to lazy_static block or somewhere else
+        let global_constants = {
+            use std::f64::consts;
+
+            let mut map = VariableDict::new();
+            map.insert("PI".to_owned(), consts::PI.into());
+            map.insert("E".to_owned(), consts::E.into());
+            map
+        };
+
         let start = Instant::now();
         let timeout = Duration::from_millis(500);
 
@@ -178,7 +174,16 @@ impl Formula {
                     parser::Value::Number(value) => stack.push(Number(value.clone())),
                     parser::Value::Literal(text) => stack.push(Literal(text.clone())),
                     parser::Value::Variable(name) => {
-                        let var = var!(vars, name);
+                        let var = vars
+                            .as_ref()
+                            .map(|m| m.get(name))
+                            .flatten()
+                            .or(global_constants.get(name))
+                            .ok_or(FormulaError::EvaluationError(format!(
+                                "variable '{}' not found",
+                                name
+                            )))?
+                            .clone();
                         stack.push(Number(var));
                     }
                 },
@@ -441,6 +446,20 @@ mod tests {
 
         assert!(Formula::new(r#"  1 ! "#).unwrap().eval().is_ok());
         assert!(Formula::new(r#" "a"! "#).unwrap().eval().is_err());
+    }
+
+    #[test]
+    fn global_constants() {
+        let rounded = move |v| Number(Numeric::from(v).round(&4.into()).unwrap());
+
+        assert_eq!(
+            Formula::new("round(PI, 4)").unwrap().eval().unwrap(),
+            rounded(std::f64::consts::PI)
+        );
+        assert_eq!(
+            Formula::new("round(E, 4)").unwrap().eval().unwrap(),
+            rounded(std::f64::consts::E)
+        );
     }
 
     proptest! {
