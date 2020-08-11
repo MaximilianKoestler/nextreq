@@ -163,7 +163,7 @@ impl Formula {
         for item in self.parser.iter() {
             if start.elapsed() > timeout {
                 error!(
-                    "timeout exceeded ({:?} out of {:?}",
+                    "timeout exceeded ({:?} out of {:?})",
                     start.elapsed(),
                     timeout
                 );
