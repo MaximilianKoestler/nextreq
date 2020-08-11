@@ -1,11 +1,11 @@
 import { createRouter, createWebHashHistory, RouteRecordRaw } from "vue-router";
-import Calculator from "../views/Calculator.vue";
+import TheCalculator from "@/views/TheCalculator.vue";
 
 const routes: Array<RouteRecordRaw> = [
   {
     path: "/",
-    name: "Calculator",
-    component: Calculator,
+    name: "TheCalculator",
+    component: TheCalculator,
   },
 ];
 

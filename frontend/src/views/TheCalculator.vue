@@ -5,13 +5,13 @@
 </template>
 
 <script lang="ts">
-import { Options, Vue } from "vue-class-component";
+import { defineComponent } from "vue";
 import Calculator from "@/components/Calculator.vue";
 
-@Options({
+export default defineComponent({
+  name: "TheCalculator",
   components: {
     Calculator,
   },
-})
-export default class Home extends Vue {}
+});
 </script>

@@ -7,7 +7,9 @@
 </template>
 
 <script lang="ts">
-import { Options, Vue } from "vue-class-component";
+import { defineComponent } from "vue";
 
-export default class App extends Vue {}
+export default defineComponent({
+  name: "App",
+});
 </script>
