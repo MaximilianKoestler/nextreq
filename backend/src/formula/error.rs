@@ -18,3 +18,24 @@ impl fmt::Display for FormulaError {
         }
     }
 }
+
+#[derive(Debug, Clone)]
+pub struct PositionedFormulaError {
+    pub error: FormulaError,
+    pub offset: usize,
+}
+
+impl fmt::Display for PositionedFormulaError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{} at offset {}", self.error, self.offset)
+    }
+}
+
+impl FormulaError {
+    pub fn at(self, offset: usize) -> PositionedFormulaError {
+        PositionedFormulaError {
+            error: self,
+            offset,
+        }
+    }
+}

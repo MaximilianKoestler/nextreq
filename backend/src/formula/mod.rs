@@ -132,7 +132,7 @@ impl Mul for Value {
 
 impl Formula {
     pub fn new(input: &str) -> Result<Self, FormulaError> {
-        let lexer = lexer::Lexer::new(input)?;
+        let lexer = lexer::Lexer::new(input).map_err(|e| e.error)?;
         let parser = parser::Parser::new(&lexer[..])?;
         Ok(Self { parser })
     }

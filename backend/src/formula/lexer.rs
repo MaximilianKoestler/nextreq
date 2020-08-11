@@ -2,7 +2,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::str;
 
-use super::error::FormulaError;
+use super::error::{FormulaError, PositionedFormulaError};
 use super::numeric::{Numeric, ParseError};
 use super::quoted_string::Quotable;
 
@@ -69,6 +69,7 @@ impl fmt::Display for Token {
     }
 }
 
+#[derive(Debug)]
 pub struct Lexer {
     tokens: Vec<Token>,
 }
@@ -109,23 +110,27 @@ impl<'a> PrefixTakable<'a> for str::Chars<'a> {
 }
 
 impl Lexer {
-    pub fn new(input: &str) -> Result<Lexer, FormulaError> {
+    pub fn new(input: &str) -> Result<Lexer, PositionedFormulaError> {
         let mut tokens = Vec::new();
 
         let mut it = input.chars();
+        let mut offset = 0;
         while let Some(c) = it.clone().next() {
             match c {
                 '0'..='9' => {
-                    let value = Self::get_number(&mut it)?;
+                    let (value, forward) = Self::get_number(&mut it, offset)?;
                     tokens.push(Token::Number(value));
+                    offset += forward;
                 }
                 '"' => {
-                    let literal = Self::get_literal(&mut it);
-                    tokens.push(Token::Literal(literal?.to_owned()));
+                    let (literal, forward) = Self::get_literal(&mut it, offset)?;
+                    tokens.push(Token::Literal(literal.to_owned()));
+                    offset += forward;
                 }
                 x if x.is_alphabetic() => {
-                    let value = Self::get_identifier(&mut it);
-                    tokens.push(Token::Identifier(value.to_owned()));
+                    let (name, forward) = Self::get_identifier(&mut it);
+                    tokens.push(Token::Identifier(name.to_owned()));
+                    offset += forward;
                 }
                 '+' => {
                     tokens.push(Token::Operator(Operator::Plus));
@@ -156,29 +161,37 @@ impl Lexer {
                 }
                 x if x.is_whitespace() => {}
                 _ => {
-                    return Err(FormulaError::LexerError(format!(
-                        "unexpected symbol: {}",
-                        c
-                    )));
+                    return Err(
+                        FormulaError::LexerError(format!("unexpected symbol: {}", c)).at(offset),
+                    )
                 }
             };
             it.next();
+            offset += 1;
         }
 
         Ok(Self { tokens })
     }
 
-    fn get_number(it: &mut str::Chars) -> Result<Numeric, FormulaError> {
-        it.take_prefix(|c| c.is_ascii_digit() || *c == '.')
+    fn get_number(
+        it: &mut str::Chars,
+        offset: usize,
+    ) -> Result<(Numeric, usize), PositionedFormulaError> {
+        let numeric = it.take_prefix(|c| c.is_ascii_digit() || *c == '.');
+        numeric
             .parse()
-            .map_err(|err: ParseError| FormulaError::LexerError(err.to_string()))
+            .map(|n| (n, numeric.len() - 1))
+            .map_err(|err: ParseError| FormulaError::LexerError(err.to_string()).at(offset))
     }
 
-    fn get_literal<'a>(it: &'a mut str::Chars) -> Result<&'a str, FormulaError> {
+    fn get_literal<'a>(
+        it: &'a mut str::Chars,
+        offset: usize,
+    ) -> Result<(&'a str, usize), PositionedFormulaError> {
         it.next();
-        let result = it.take_prefix(|c| *c != '"');
+        let literal = it.take_prefix(|c| *c != '"');
 
-        let to_check = if result.is_empty() {
+        let to_check = if literal.is_empty() {
             it.clone().next()
         } else {
             it.next();
@@ -186,16 +199,18 @@ impl Lexer {
         };
 
         if let Some('"') = to_check {
-            Ok(result)
+            Ok((literal, literal.len() + 1))
         } else {
-            Err(FormulaError::LexerError(
-                "literal not terminated by \"".to_owned(),
-            ))
+            Err(
+                FormulaError::LexerError("literal not terminated by \"".to_owned())
+                    .at(offset + literal.len() + 1),
+            )
         }
     }
 
-    fn get_identifier<'a>(it: &'a mut str::Chars) -> &'a str {
-        it.take_prefix(|c| c.is_alphanumeric())
+    fn get_identifier<'a>(it: &'a mut str::Chars) -> (&'a str, usize) {
+        let identifier = it.take_prefix(|c| c.is_alphanumeric());
+        (identifier, identifier.len() - 1)
     }
 }
 
@@ -294,9 +309,35 @@ mod tests {
 
     #[test]
     fn tokenize_invalid() {
-        assert!(Lexer::new("$").is_err());
-        assert!(Lexer::new("1.0.0").is_err());
-        assert!(Lexer::new("\"abc").is_err());
+        use super::super::error::FormulaError::LexerError;
+
+        let error = Lexer::new("$").unwrap_err();
+        assert!(matches!(error.error, LexerError(_)));
+        assert_eq!(error.offset, 0);
+
+        let error = Lexer::new("123$").unwrap_err();
+        assert!(matches!(error.error, LexerError(_)));
+        assert_eq!(error.offset, 3);
+
+        let error = Lexer::new("\"abc\"$").unwrap_err();
+        assert!(matches!(error.error, LexerError(_)));
+        assert_eq!(error.offset, 5);
+
+        let error = Lexer::new("abc$").unwrap_err();
+        assert!(matches!(error.error, LexerError(_)));
+        assert_eq!(error.offset, 3);
+
+        let error = Lexer::new("1.0.0").unwrap_err();
+        assert!(matches!(error.error, LexerError(_)));
+        assert_eq!(error.offset, 0);
+
+        let error = Lexer::new("  2 + 1.0.0").unwrap_err();
+        assert!(matches!(error.error, LexerError(_)));
+        assert_eq!(error.offset, 6);
+
+        let error = Lexer::new("\"abc").unwrap_err();
+        assert!(matches!(error.error, LexerError(_)));
+        assert_eq!(error.offset, 4);
     }
 
     proptest! {
