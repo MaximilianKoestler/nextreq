@@ -1,10 +1,18 @@
 <template>
-  <input type="text" v-model="formula" />
-  <div>{{ computedResult }}</div>
+  <input type="text" v-model="formula" v-on:input="debounceListener" />
+  <div>
+    <span v-if="computedResult.value !== undefined">{{
+      computedResult.value
+    }}</span>
+    <span v-else-if="computedResult.error !== undefined" class="error">{{
+      computedResult.error
+    }}</span>
+    <span v-else>...</span>
+  </div>
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, watch } from "vue";
+import { defineComponent, computed, ref, Ref, watch } from "vue";
 
 import gql from "graphql-tag";
 
@@ -23,30 +31,58 @@ const apolloClient = new ApolloClient({
   cache,
 });
 
+interface Result {
+  value?: string;
+  error?: string;
+}
+
 export default defineComponent({
   name: "Calculator",
   setup: () => {
     const formula = ref("");
-    const computedResult = ref("");
+    const debouncedFormula = ref("");
 
-    watch(formula, (newFormula) => {
-      const result = apolloClient.query({
-        query: gql`
+    const computedResult: Ref<Result> = ref({ value: "" });
+
+    let timeoutRef: NodeJS.Timeout | null = null;
+    const debounceListener = (e: any) => {
+      if (timeoutRef !== null) {
+        clearTimeout(timeoutRef);
+      }
+
+      formula.value = e.target.value;
+      timeoutRef = setTimeout(() => {
+        debouncedFormula.value = e.target.value;
+      }, 800);
+    };
+
+    watch(debouncedFormula, (newFormula) => {
+      computedResult.value = {};
+
+      apolloClient
+        .query({
+          query: gql`
           query {
             calculate(input: "${newFormula}")
           }
         `,
-      });
-      result
+        })
         .then((response) => {
-          computedResult.value = response.data.calculate;
+          computedResult.value = { value: response.data.calculate };
         })
         .catch((error) => {
-          console.error(error);
+          if (error.graphQLErrors.length == 1) {
+            computedResult.value = { error: error.graphQLErrors[0].message };
+          } else if (error.networkError !== undefined) {
+            computedResult.value = { error: error.networkError };
+          } else {
+            computedResult.value = { error };
+          }
         });
     });
 
     return {
+      debounceListener,
       formula,
       computedResult,
     };
@@ -54,4 +90,8 @@ export default defineComponent({
 });
 </script>
 
-<style scoped lang="scss"></style>
+<style scoped lang="scss">
+.error {
+  color: red;
+}
+</style>
