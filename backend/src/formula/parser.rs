@@ -2,7 +2,7 @@ use std::fmt;
 use std::ops::Deref;
 
 use super::error::FormulaError;
-use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, Token};
+use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, PositionedToken, Token};
 use super::numeric::Numeric;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -95,7 +95,7 @@ macro_rules! error {
     }}
 }
 
-type PeekableToken<'a> = std::iter::Peekable<std::slice::Iter<'a, Token>>;
+type PeekableToken<'a> = std::iter::Peekable<std::slice::Iter<'a, PositionedToken>>;
 
 enum TermExpectation {
     Unlimited,
@@ -112,7 +112,7 @@ impl TermExpectation {
 }
 
 impl Parser {
-    pub fn new(tokens: &[Token]) -> Result<Self, FormulaError> {
+    pub fn new(tokens: &[PositionedToken]) -> Result<Self, FormulaError> {
         let mut it = tokens.iter().peekable();
         let parsed_expression = Self::expression(&mut it, 0, TermExpectation::Unlimited)?;
 
@@ -130,7 +130,7 @@ impl Parser {
     ) -> Result<Vec<ParseItem>, FormulaError> {
         let mut result = vec![];
 
-        match it.next() {
+        match it.next().map(|t| &t.token) {
             Some(Token::Number(value)) => {
                 result.push(ParseItem::Value(Value::Number(value.clone())))
             }
@@ -138,7 +138,7 @@ impl Parser {
                 result.push(ParseItem::Value(Value::Literal(text.clone())))
             }
             Some(Token::Identifier(name)) => {
-                if let Some(Token::Bracket(LexerBracket::RoundOpen)) = it.peek() {
+                if let Some(Token::Bracket(LexerBracket::RoundOpen)) = it.peek().map(|t| &t.token) {
                     let (function, params) = Self::function_item(name)?;
                     let bp = Self::function_binding_power();
 
@@ -161,7 +161,7 @@ impl Parser {
             }
             Some(Token::Bracket(LexerBracket::RoundOpen)) => {
                 result.extend(Self::expression(it, 0, limit.countdown())?);
-                match it.next() {
+                match it.next().map(|t| &t.token) {
                     Some(Token::Bracket(LexerBracket::RoundClose)) => (),
                     Some(x) => panic!("expected closing bracket, found: {}", x),
                     None => error!("expected closing bracket, found end of expression"),
@@ -173,7 +173,7 @@ impl Parser {
 
         let mut terms = 1;
         loop {
-            match it.peek() {
+            match it.peek().map(|t| &t.token) {
                 Some(Token::Bracket(LexerBracket::RoundClose)) => match limit {
                     TermExpectation::Exact(expected, 0) if terms != expected => {
                         error!("expected {} terms, found {}", expected, terms)
@@ -275,12 +275,14 @@ impl Deref for Parser {
 }
 
 #[cfg(test)]
-pub mod tests {
+pub(crate) mod tests {
     use super::super::quoted_string::Quotable;
     use super::*;
     use itertools::Itertools;
     use proptest::prelude::*;
     use std::iter::{once, repeat};
+
+    use crate::formula::lexer::tests::Positionable;
 
     impl Parser {
         fn postfix(&self) -> String {
@@ -539,18 +541,21 @@ pub mod tests {
 
     #[test]
     fn parse_invalid() {
-        assert!(Parser::new(&vec![Token::Operator(LexerOperator::Plus)]).is_err());
-        assert!(Parser::new(&vec![
-            Token::Number(1.0.into()),
-            Token::Bracket(LexerBracket::RoundClose)
-        ])
+        assert!(Parser::new(&vec![Token::Operator(LexerOperator::Plus)].anywhere()).is_err());
+        assert!(Parser::new(
+            &vec![
+                Token::Number(1.0.into()),
+                Token::Bracket(LexerBracket::RoundClose)
+            ]
+            .anywhere()
+        )
         .is_err());
     }
 
     proptest! {
         #[test]
         fn parse_value(value: Numeric) {
-            let tokens = vec![Token::Number(value.clone())];
+            let tokens = vec![Token::Number(value.clone())].anywhere();
             let parser = Parser::new(&tokens).unwrap();
             prop_assert_eq!(parser.postfix(), value.to_string());
         }
@@ -559,7 +564,7 @@ pub mod tests {
     proptest! {
         #[test]
         fn parse_literal(text: String) {
-            let tokens = vec![Token::Literal(text.clone())];
+            let tokens = vec![Token::Literal(text.clone())].anywhere();
             let parser = Parser::new(&tokens).unwrap();
             let expected = format!("\"{}\"", text);
             prop_assert_eq!(parser.postfix(), expected);
@@ -569,7 +574,7 @@ pub mod tests {
     proptest! {
         #[test]
         fn parse_variable(name: String) {
-            let tokens = vec![Token::Identifier(name.clone())];
+            let tokens = vec![Token::Identifier(name.clone())].anywhere();
             let parser = Parser::new(&tokens).unwrap();
             prop_assert_eq!(parser.postfix(), name);
         }
@@ -581,7 +586,8 @@ pub mod tests {
             Token::Bracket(LexerBracket::RoundOpen),
             Token::Number(1.0.into()),
             Token::Bracket(LexerBracket::RoundClose),
-        ];
+        ]
+        .anywhere();
         let parser = Parser::new(&tokens).unwrap();
         assert_eq!(parser.postfix(), "1".to_owned());
     }
@@ -595,7 +601,7 @@ pub mod tests {
                 Token::Number(lhs),
                 Token::Operator(op),
                 Token::Number(rhs),
-            ];
+            ].anywhere();
 
             let parser = Parser::new(&tokens).unwrap();
             assert_eq!(parser.postfix(), expected);
@@ -610,7 +616,7 @@ pub mod tests {
             let tokens = vec![
                 Token::Operator(op),
                 Token::Number(rhs),
-            ];
+            ].anywhere();
 
             let parser = Parser::new(&tokens).unwrap();
             assert_eq!(parser.postfix(), expected);
@@ -625,7 +631,7 @@ pub mod tests {
             let tokens = vec![
                 Token::Number(lhs),
                 Token::Operator(op),
-            ];
+            ].anywhere();
 
             let parser = Parser::new(&tokens).unwrap();
             assert_eq!(parser.postfix(), expected);
@@ -634,159 +640,201 @@ pub mod tests {
 
     #[test]
     fn parse_complex_expressions() {
-        let parser = Parser::new(&vec![
-            Token::Number(1.0.into()),
-            Token::Operator(LexerOperator::Plus),
-            Token::Number(2.0.into()),
-            Token::Operator(LexerOperator::Minus),
-            Token::Number(3.0.into()),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Number(2.0.into()),
+                Token::Operator(LexerOperator::Minus),
+                Token::Number(3.0.into()),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 + 3 -"));
 
-        let parser = Parser::new(&vec![
-            Token::Number(1.0.into()),
-            Token::Operator(LexerOperator::Plus),
-            Token::Number(2.0.into()),
-            Token::Operator(LexerOperator::Star),
-            Token::Number(3.0.into()),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Number(2.0.into()),
+                Token::Operator(LexerOperator::Star),
+                Token::Number(3.0.into()),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 3 * +"));
 
-        let parser = Parser::new(&vec![
-            Token::Number(1.0.into()),
-            Token::Operator(LexerOperator::Star),
-            Token::Number(2.0.into()),
-            Token::Operator(LexerOperator::Minus),
-            Token::Number(3.0.into()),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Star),
+                Token::Number(2.0.into()),
+                Token::Operator(LexerOperator::Minus),
+                Token::Number(3.0.into()),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 * 3 -"));
 
-        let parser = Parser::new(&vec![
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0.into()),
-            Token::Operator(LexerOperator::Plus),
-            Token::Number(2.0.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-            Token::Operator(LexerOperator::Star),
-            Token::Number(3.0.into()),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Number(2.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+                Token::Operator(LexerOperator::Star),
+                Token::Number(3.0.into()),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 + 3 *"));
     }
 
     #[test]
     fn parse_single_parameter_function() {
-        let parser = Parser::new(&vec![
-            Token::Identifier("sqrt".to_owned()),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("sqrt".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 sqrt"));
 
-        let parser = Parser::new(&vec![
-            Token::Identifier("abs".to_owned()),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("abs".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 abs"));
 
-        let parser = Parser::new(&vec![
-            Token::Identifier("sqrt".to_owned()),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0.into()),
-            Token::Operator(LexerOperator::Plus),
-            Token::Number(2.0.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("sqrt".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Number(2.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 + sqrt"));
     }
 
     #[test]
     fn parse_multi_parameter_function() {
-        let parser = Parser::new(&vec![
-            Token::Identifier("round".to_owned()),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.5.into()),
-            Token::Operator(LexerOperator::Comma),
-            Token::Number(2.0.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("round".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.5.into()),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(2.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1.5 2 round"));
 
-        let parser = Parser::new(&vec![
-            Token::Identifier("round".to_owned()),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.5.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-            Token::Operator(LexerOperator::Comma),
-            Token::Number(2.0.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("round".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.5.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(2.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1.5 2 round"));
     }
 
     #[test]
     fn parse_wrong_parameter_number() {
-        assert!(Parser::new(&vec![
-            Token::Identifier("sqrt".to_owned()),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0.into()),
-            Token::Operator(LexerOperator::Comma),
-            Token::Number(2.0.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-        ])
+        assert!(Parser::new(
+            &vec![
+                Token::Identifier("sqrt".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(2.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .anywhere()
+        )
         .is_err());
 
-        assert!(Parser::new(&vec![
-            Token::Identifier("round".to_owned()),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0.into()),
-            Token::Operator(LexerOperator::Comma),
-            Token::Number(2.0.into()),
-            Token::Operator(LexerOperator::Comma),
-            Token::Number(3.0.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-        ])
+        assert!(Parser::new(
+            &vec![
+                Token::Identifier("round".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(2.0.into()),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(3.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .anywhere()
+        )
         .is_err());
 
-        assert!(Parser::new(&vec![
-            Token::Identifier("round".to_owned()),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Number(1.0.into()),
-            Token::Bracket(LexerBracket::RoundClose),
-        ])
+        assert!(Parser::new(
+            &vec![
+                Token::Identifier("round".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .anywhere()
+        )
         .is_err());
     }
 
     #[test]
     fn parse_literal_operations() {
-        let parser = Parser::new(&vec![
-            Token::Literal("abc".to_owned()),
-            Token::Operator(LexerOperator::Plus),
-            Token::Literal("def".to_owned()),
-            Token::Operator(LexerOperator::Minus),
-            Token::Number(3.0.into()),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Literal("abc".to_owned()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Literal("def".to_owned()),
+                Token::Operator(LexerOperator::Minus),
+                Token::Number(3.0.into()),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!(r#""abc" "def" + 3 -"#));
 
-        let parser = Parser::new(&vec![
-            Token::Identifier("sqrt".to_owned()),
-            Token::Bracket(LexerBracket::RoundOpen),
-            Token::Literal("abc".to_owned()),
-            Token::Bracket(LexerBracket::RoundClose),
-        ])
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("sqrt".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Literal("abc".to_owned()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .anywhere(),
+        )
         .unwrap();
         assert_eq!(parser.postfix(), format!(r#""abc" sqrt"#));
     }
@@ -798,7 +846,7 @@ pub mod tests {
         })]
         #[test]
         fn arbitrary_expression(token_tree: TokenTree) {
-            let parser = Parser::new(&token_tree.infix());
+            let parser = Parser::new(&token_tree.infix().anywhere());
             prop_assert_eq!(parser.unwrap().postfix(), token_tree.postfix());
         }
     }
@@ -806,7 +854,7 @@ pub mod tests {
     proptest! {
         #[test]
         fn tokenizer_does_not_crash(input in prop::collection::vec(any::<Token>(), 0..64)) {
-            let _ = Parser::new(&input);
+            let _ = Parser::new(&input.anywhere());
         }
     }
 }

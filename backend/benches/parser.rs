@@ -1,7 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use std::iter::repeat;
 
-use nextreq::formula::lexer::{Operator, Token};
+use nextreq::formula::lexer::{Operator, PositionedToken, Token};
 use nextreq::formula::parser;
 
 fn benchmark_many_additions(c: &mut Criterion) {
@@ -11,7 +11,12 @@ fn benchmark_many_additions(c: &mut Criterion) {
         Token::Operator(Operator::Plus),
         Token::Number(std::f64::consts::PI.into()),
     ];
-    let input: Vec<Token> = repeat(part.iter()).take(n).flatten().cloned().collect();
+    let input: Vec<PositionedToken> = repeat(part.iter())
+        .take(n)
+        .flatten()
+        .cloned()
+        .map(|t| t.at(0, 0))
+        .collect();
 
     c.bench_function(&format!("parse additions ({})", n), |b| {
         b.iter(|| parser::Parser::new(black_box(&input)).unwrap())

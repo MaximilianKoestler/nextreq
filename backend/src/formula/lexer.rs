@@ -361,6 +361,16 @@ pub(crate) mod tests {
         }
     }
 
+    pub trait Positionable {
+        fn anywhere(self) -> Vec<PositionedToken>;
+    }
+
+    impl Positionable for Vec<Token> {
+        fn anywhere(self) -> Vec<PositionedToken> {
+            self.into_iter().map(|t| t.at(0, 0)).collect()
+        }
+    }
+
     #[test]
     fn tokenize_invalid() {
         use super::super::error::FormulaError::LexerError;
