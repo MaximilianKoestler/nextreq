@@ -69,9 +69,32 @@ impl fmt::Display for Token {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct PositionedToken {
+    pub token: Token,
+    pub start: usize,
+    pub length: usize,
+}
+
+impl Token {
+    pub fn at(self, start: usize, length: usize) -> PositionedToken {
+        PositionedToken {
+            token: self,
+            start,
+            length,
+        }
+    }
+}
+
+impl fmt::Display for PositionedToken {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.token)
+    }
+}
+
 #[derive(Debug)]
 pub struct Lexer {
-    tokens: Vec<Token>,
+    tokens: Vec<PositionedToken>,
 }
 
 trait PrefixTakable<'a> {
@@ -118,46 +141,46 @@ impl Lexer {
         while let Some(c) = it.clone().next() {
             match c {
                 '0'..='9' => {
-                    let (value, forward) = Self::get_number(&mut it, offset)?;
-                    tokens.push(Token::Number(value));
-                    offset += forward;
+                    let (value, length) = Self::get_number(&mut it, offset)?;
+                    tokens.push(Token::Number(value).at(offset, length));
+                    offset += length - 1;
                 }
                 '"' => {
                     let (literal, forward) = Self::get_literal(&mut it, offset)?;
-                    tokens.push(Token::Literal(literal.to_owned()));
+                    tokens.push(Token::Literal(literal.to_owned()).at(offset, forward + 1));
                     offset += forward;
                 }
                 x if x.is_alphabetic() => {
                     let (name, forward) = Self::get_identifier(&mut it);
-                    tokens.push(Token::Identifier(name.to_owned()));
+                    tokens.push(Token::Identifier(name.to_owned()).at(offset, forward + 1));
                     offset += forward;
                 }
                 '+' => {
-                    tokens.push(Token::Operator(Operator::Plus));
+                    tokens.push(Token::Operator(Operator::Plus).at(offset, 1));
                 }
                 '-' => {
-                    tokens.push(Token::Operator(Operator::Minus));
+                    tokens.push(Token::Operator(Operator::Minus).at(offset, 1));
                 }
                 '*' => {
-                    tokens.push(Token::Operator(Operator::Star));
+                    tokens.push(Token::Operator(Operator::Star).at(offset, 1));
                 }
                 '/' => {
-                    tokens.push(Token::Operator(Operator::Slash));
+                    tokens.push(Token::Operator(Operator::Slash).at(offset, 1));
                 }
                 '^' => {
-                    tokens.push(Token::Operator(Operator::Caret));
+                    tokens.push(Token::Operator(Operator::Caret).at(offset, 1));
                 }
                 '!' => {
-                    tokens.push(Token::Operator(Operator::ExclamationMark));
+                    tokens.push(Token::Operator(Operator::ExclamationMark).at(offset, 1));
                 }
                 ',' => {
-                    tokens.push(Token::Operator(Operator::Comma));
+                    tokens.push(Token::Operator(Operator::Comma).at(offset, 1));
                 }
                 '(' => {
-                    tokens.push(Token::Bracket(Bracket::RoundOpen));
+                    tokens.push(Token::Bracket(Bracket::RoundOpen).at(offset, 1));
                 }
                 ')' => {
-                    tokens.push(Token::Bracket(Bracket::RoundClose));
+                    tokens.push(Token::Bracket(Bracket::RoundClose).at(offset, 1));
                 }
                 x if x.is_whitespace() => {}
                 _ => {
@@ -180,7 +203,7 @@ impl Lexer {
         let numeric = it.take_prefix(|c| c.is_ascii_digit() || *c == '.');
         numeric
             .parse()
-            .map(|n| (n, numeric.len() - 1))
+            .map(|n| (n, numeric.chars().count()))
             .map_err(|err: ParseError| FormulaError::LexerError(err.to_string()).at(offset))
     }
 
@@ -199,23 +222,23 @@ impl Lexer {
         };
 
         if let Some('"') = to_check {
-            Ok((literal, literal.len() + 1))
+            Ok((literal, literal.chars().count() + 1))
         } else {
             Err(
                 FormulaError::LexerError("literal not terminated by \"".to_owned())
-                    .at(offset + literal.len() + 1),
+                    .at(offset + literal.chars().count() + 1),
             )
         }
     }
 
     fn get_identifier<'a>(it: &'a mut str::Chars) -> (&'a str, usize) {
         let identifier = it.take_prefix(|c| c.is_alphanumeric());
-        (identifier, identifier.len() - 1)
+        (identifier, identifier.chars().count() - 1)
     }
 }
 
 impl Deref for Lexer {
-    type Target = [Token];
+    type Target = [PositionedToken];
 
     fn deref(&self) -> &Self::Target {
         &self.tokens
@@ -223,7 +246,7 @@ impl Deref for Lexer {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use itertools::Itertools;
     use proptest::prelude::*;
@@ -307,6 +330,37 @@ mod tests {
        }
     }
 
+    impl Token {
+        /// For testing purposes only, convert a single `Token` into a `PositionedToken` at a given
+        /// `offset`.
+        /// The `offset` is than advanced to point after the processed token.
+        ///
+        /// This function also handles special cases, e.g. separating the sign character from
+        /// negative numbers.
+        pub fn expected_sequence(self, offset: &mut usize) -> Vec<PositionedToken> {
+            let mut tokens = vec![];
+            let mut length = 0;
+
+            match self {
+                Token::Number(value) => {
+                    length += value.to_string().chars().count();
+                    if value < 0.0 {
+                        tokens.push(Token::Operator(Operator::Minus).at(*offset, 1));
+                        *offset += 1;
+                        length -= 1;
+                    }
+                    tokens.push(Token::Number(value.abs()).at(*offset, length));
+                }
+                _ => {
+                    length += self.to_string().chars().count();
+                    tokens.push(self.at(*offset, length));
+                }
+            }
+            *offset += length;
+            tokens
+        }
+    }
+
     #[test]
     fn tokenize_invalid() {
         use super::super::error::FormulaError::LexerError;
@@ -343,12 +397,9 @@ mod tests {
     proptest! {
         #[test]
         fn tokenize_number(value: Numeric, spaces in whitespace_strategy()) {
-            let lexer = Lexer::new(&format!("{}{}", value, spaces)).unwrap();
+            let lexer = Lexer::new(&format!("{sp}{}{sp}", value, sp = spaces)).unwrap();
 
-            let mut expected = vec![Token::Number(value.abs())];
-            if value < 0.0 {
-                expected.insert(0, Token::Operator(Operator::Minus))
-            }
+            let expected = Token::Number(value).expected_sequence(&mut spaces.chars().count());
             prop_assert_eq!(&lexer[..], &expected[..]);
         }
     }
@@ -357,16 +408,16 @@ mod tests {
     #[test]
         fn tokenize_literal(text in literal_strategy(), spaces in whitespace_strategy()) {
             let lexer = Lexer::new(&format!("{sp}{}{sp}", text.quote(), sp = spaces)).unwrap();
-            let expected = vec![Token::Literal(text)];
+            let expected = Token::Literal(text).expected_sequence(&mut spaces.chars().count());
             prop_assert_eq!(&lexer[..], &expected[..]);
         }
     }
 
     proptest! {
         #[test]
-        fn tokenize_identifier(value in identifier_strategy(), spaces in whitespace_strategy()) {
-            let lexer = Lexer::new(&format!("{}{}", value, spaces)).unwrap();
-            let expected = vec![Token::Identifier(value)];
+        fn tokenize_identifier(name in identifier_strategy(), spaces in whitespace_strategy()) {
+            let lexer = Lexer::new(&format!("{sp}{}{sp}", name, sp = spaces)).unwrap();
+            let expected = Token::Identifier(name).expected_sequence(&mut spaces.chars().count());
             prop_assert_eq!(&lexer[..], &expected[..]);
         }
     }
@@ -380,17 +431,14 @@ mod tests {
             spaces in whitespace_strategy(),
         ) {
             let lexer = Lexer::new(&format!("{}{sp}{}{sp}{}", lhs, op, rhs, sp = spaces)).unwrap();
-            let mut expected = vec![
-                Token::Number(lhs.abs()),
-                Token::Operator(op),
-                Token::Number(rhs.abs()),
-            ];
-            if rhs < 0.0 {
-                expected.insert(2, Token::Operator(Operator::Minus))
-            }
-            if lhs < 0.0 {
-                expected.insert(0, Token::Operator(Operator::Minus))
-            }
+            let mut expected = vec![];
+
+            let mut current_offset = 0;
+            expected.extend(Token::Number(lhs).expected_sequence(&mut current_offset));
+            current_offset += spaces.chars().count();
+            expected.extend(Token::Operator(op).expected_sequence(&mut current_offset));
+            current_offset += spaces.chars().count();
+            expected.extend(Token::Number(rhs).expected_sequence(&mut current_offset));
 
             prop_assert_eq!(&lexer[..], &expected[..]);
         }
@@ -400,8 +448,8 @@ mod tests {
     fn tokenize_bracket_pair() {
         let lexer = Lexer::new("()").unwrap();
         let expected = vec![
-            Token::Bracket(Bracket::RoundOpen),
-            Token::Bracket(Bracket::RoundClose),
+            Token::Bracket(Bracket::RoundOpen).at(0, 1),
+            Token::Bracket(Bracket::RoundClose).at(1, 1),
         ];
         assert_eq!(&lexer[..], &expected[..]);
     }
@@ -410,25 +458,25 @@ mod tests {
     fn tokenize_complex_expression() {
         let lexer = Lexer::new("0+ fn3(1.5 + 10* -200, 5)/3^你好! \"Hi\"").unwrap();
         let expected = vec![
-            Token::Number(0.0.into()),
-            Token::Operator(Operator::Plus),
-            Token::Identifier("fn3".to_owned()),
-            Token::Bracket(Bracket::RoundOpen),
-            Token::Number(1.5.into()),
-            Token::Operator(Operator::Plus),
-            Token::Number(10.0.into()),
-            Token::Operator(Operator::Star),
-            Token::Operator(Operator::Minus),
-            Token::Number(200.0.into()),
-            Token::Operator(Operator::Comma),
-            Token::Number(5.0.into()),
-            Token::Bracket(Bracket::RoundClose),
-            Token::Operator(Operator::Slash),
-            Token::Number(3.0.into()),
-            Token::Operator(Operator::Caret),
-            Token::Identifier("你好".to_owned()),
-            Token::Operator(Operator::ExclamationMark),
-            Token::Literal("Hi".to_owned()),
+            Token::Number(0.0.into()).at(0, 1),
+            Token::Operator(Operator::Plus).at(1, 1),
+            Token::Identifier("fn3".to_owned()).at(3, 3),
+            Token::Bracket(Bracket::RoundOpen).at(6, 1),
+            Token::Number(1.5.into()).at(7, 3),
+            Token::Operator(Operator::Plus).at(11, 1),
+            Token::Number(10.0.into()).at(13, 2),
+            Token::Operator(Operator::Star).at(15, 1),
+            Token::Operator(Operator::Minus).at(17, 1),
+            Token::Number(200.0.into()).at(18, 3),
+            Token::Operator(Operator::Comma).at(21, 1),
+            Token::Number(5.0.into()).at(23, 1),
+            Token::Bracket(Bracket::RoundClose).at(24, 1),
+            Token::Operator(Operator::Slash).at(25, 1),
+            Token::Number(3.0.into()).at(26, 1),
+            Token::Operator(Operator::Caret).at(27, 1),
+            Token::Identifier("你好".to_owned()).at(28, 2),
+            Token::Operator(Operator::ExclamationMark).at(30, 1),
+            Token::Literal("Hi".to_owned()).at(32, 4),
         ];
         assert_eq!(&lexer[..], &expected[..]);
     }
@@ -446,14 +494,13 @@ mod tests {
                 .flat_map(|(token, space)| once(token.to_string()).chain(once(space.clone())))
                 .join("");
 
+            let mut current_offset = 0;
             let expected: Vec<_> = input
                 .into_iter()
-                .map(|(token, _)| token)
-                .flat_map(|token| match token {
-                    Token::Number(value) if value < 0.0 => {
-                        vec![Token::Operator(Operator::Minus), Token::Number(value.abs())]
-                    }
-                    _ => vec![token],
+                .flat_map(|(token, space)| {
+                    let tokens = token.expected_sequence(&mut current_offset);
+                    current_offset += space.chars().count();
+                    tokens
                 })
                 .collect();
 
