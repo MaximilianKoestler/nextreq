@@ -137,84 +137,60 @@ impl Parser {
     ) -> Result<Vec<ParseItem>, PositionedFormulaError> {
         let mut result = vec![];
 
-        match it.next().map(|t| &t.token) {
-            Some(Token::Number(value)) => {
-                result.push(ParseItem::Value(Value::Number(value.clone())))
-            }
-            Some(Token::Literal(text)) => {
-                result.push(ParseItem::Value(Value::Literal(text.clone())))
-            }
-            Some(Token::Identifier(name)) => {
-                if let Some(Token::Bracket(LexerBracket::RoundOpen)) = it.peek().map(|t| &t.token) {
-                    let (function, params) = Self::function_item(name).map_err(|e| e.at(0))?;
-                    let bp = Self::function_binding_power();
+        match it.next() {
+            Some(token) => match &token.token {
+                Token::Number(value) => result.push(ParseItem::Value(Value::Number(value.clone()))),
+                Token::Literal(text) => result.push(ParseItem::Value(Value::Literal(text.clone()))),
+                Token::Identifier(name) => {
+                    if let Some(Token::Bracket(LexerBracket::RoundOpen)) =
+                        it.peek().map(|t| &t.token)
+                    {
+                        let (function, params) = Self::function_item(name).map_err(|e| e.at(0))?;
+                        let bp = Self::function_binding_power();
 
-                    result.extend(Self::expression(it, bp, TermExpectation::Exact(params, 1))?);
-                    result.push(ParseItem::Function(function, params));
-                } else {
-                    result.push(ParseItem::Value(Value::Variable(name.clone())))
+                        result.extend(Self::expression(it, bp, TermExpectation::Exact(params, 1))?);
+                        result.push(ParseItem::Function(function, params));
+                    } else {
+                        result.push(ParseItem::Value(Value::Variable(name.clone())))
+                    }
                 }
-            }
-            Some(Token::Operator(op)) => {
-                let op = match op {
-                    LexerOperator::Plus => Operator::Pos,
-                    LexerOperator::Minus => Operator::Neg,
-                    _ => error2!(0, "unsupported unary operator: {}", op),
-                };
-                let bp = Self::prefix_binding_power(&op);
+                Token::Operator(op) => {
+                    let op = match op {
+                        LexerOperator::Plus => Operator::Pos,
+                        LexerOperator::Minus => Operator::Neg,
+                        _ => error2!(0, "unsupported unary operator: {}", op),
+                    };
+                    let bp = Self::prefix_binding_power(&op);
 
-                result.extend(Self::expression(it, bp, TermExpectation::Unlimited)?);
-                result.push(ParseItem::Operator(op));
-            }
-            Some(Token::Bracket(LexerBracket::RoundOpen)) => {
-                result.extend(Self::expression(it, 0, limit.countdown())?);
-                match it.next().map(|t| &t.token) {
-                    Some(Token::Bracket(LexerBracket::RoundClose)) => (),
-                    Some(x) => panic!("expected closing bracket, found: {}", x),
-                    None => error2!(0, "expected closing bracket, found end of expression"),
+                    result.extend(Self::expression(it, bp, TermExpectation::Unlimited)?);
+                    result.push(ParseItem::Operator(op));
                 }
-            }
-            Some(token) => error2!(0, "unsupported start token: {}", token),
+                Token::Bracket(LexerBracket::RoundOpen) => {
+                    result.extend(Self::expression(it, 0, limit.countdown())?);
+                    match it.next().map(|t| &t.token) {
+                        Some(Token::Bracket(LexerBracket::RoundClose)) => (),
+                        Some(x) => panic!("expected closing bracket, found: {}", x),
+                        None => error2!(0, "expected closing bracket, found end of expression"),
+                    }
+                }
+                token => error2!(0, "unsupported start token: {}", token),
+            },
             None => error2!(0, "unexpected end of expression"),
         };
 
         let mut terms = 1;
         loop {
-            match it.peek().map(|t| &t.token) {
-                Some(Token::Bracket(LexerBracket::RoundClose)) => match limit {
-                    TermExpectation::Exact(expected, 0) if terms != expected => {
-                        error2!(0, "expected {} terms, found {}", expected, terms)
-                    }
-                    _ => break,
-                },
-                Some(Token::Operator(LexerOperator::Comma)) => {
-                    terms += 1;
-                    let (l_bp, r_bp) = Self::comma_binding_power();
-                    if l_bp < min_bp {
-                        break;
-                    }
-
-                    it.next();
-                    result.extend(Self::expression(it, r_bp, TermExpectation::Unlimited)?);
-                }
-                Some(Token::Operator(op)) => {
-                    let op = match op {
-                        LexerOperator::Plus => Operator::Add,
-                        LexerOperator::Minus => Operator::Sub,
-                        LexerOperator::Star => Operator::Mul,
-                        LexerOperator::Slash => Operator::Div,
-                        LexerOperator::Caret => Operator::Pow,
-                        LexerOperator::ExclamationMark => Operator::Fac,
-                        LexerOperator::Comma => panic!("unreachable code"),
-                    };
-
-                    if let Some(l_bp) = Self::postfix_binding_power(&op) {
-                        if l_bp < min_bp {
-                            break;
+            match it.peek() {
+                Some(token) => match &token.token {
+                    Token::Bracket(LexerBracket::RoundClose) => match limit {
+                        TermExpectation::Exact(expected, 0) if terms != expected => {
+                            error2!(token.start, "expected {} terms, found {}", expected, terms)
                         }
-                        it.next();
-                    } else {
-                        let (l_bp, r_bp) = Self::infix_binding_power(&op);
+                        _ => break,
+                    },
+                    Token::Operator(LexerOperator::Comma) => {
+                        terms += 1;
+                        let (l_bp, r_bp) = Self::comma_binding_power();
                         if l_bp < min_bp {
                             break;
                         }
@@ -222,9 +198,35 @@ impl Parser {
                         it.next();
                         result.extend(Self::expression(it, r_bp, TermExpectation::Unlimited)?);
                     }
-                    result.push(ParseItem::Operator(op));
-                }
-                Some(token) => error2!(0, "unsupported continuation token: {}", token),
+                    Token::Operator(op) => {
+                        let op = match op {
+                            LexerOperator::Plus => Operator::Add,
+                            LexerOperator::Minus => Operator::Sub,
+                            LexerOperator::Star => Operator::Mul,
+                            LexerOperator::Slash => Operator::Div,
+                            LexerOperator::Caret => Operator::Pow,
+                            LexerOperator::ExclamationMark => Operator::Fac,
+                            LexerOperator::Comma => panic!("unreachable code"),
+                        };
+
+                        if let Some(l_bp) = Self::postfix_binding_power(&op) {
+                            if l_bp < min_bp {
+                                break;
+                            }
+                            it.next();
+                        } else {
+                            let (l_bp, r_bp) = Self::infix_binding_power(&op);
+                            if l_bp < min_bp {
+                                break;
+                            }
+
+                            it.next();
+                            result.extend(Self::expression(it, r_bp, TermExpectation::Unlimited)?);
+                        }
+                        result.push(ParseItem::Operator(op));
+                    }
+                    token => error2!(0, "unsupported continuation token: {}", token),
+                },
                 None => break,
             };
         }
@@ -799,7 +801,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.offset, 3);
+        assert_eq!(error.offset, 5);
 
         // too many parameters for round
         let error = Parser::new(
@@ -813,11 +815,11 @@ pub(crate) mod tests {
                 Token::Number(3.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere(),
+            .at_their_index(),
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.offset, 5);
+        assert_eq!(error.offset, 7);
 
         // too few parameters for round
         let error = Parser::new(
@@ -827,7 +829,7 @@ pub(crate) mod tests {
                 Token::Number(1.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere(),
+            .at_their_index(),
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
