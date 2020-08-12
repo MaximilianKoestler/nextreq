@@ -363,11 +363,19 @@ pub(crate) mod tests {
 
     pub trait Positionable {
         fn anywhere(self) -> Vec<PositionedToken>;
+        fn at_their_index(self) -> Vec<PositionedToken>;
     }
 
     impl Positionable for Vec<Token> {
         fn anywhere(self) -> Vec<PositionedToken> {
             self.into_iter().map(|t| t.at(0, 0)).collect()
+        }
+
+        fn at_their_index(self) -> Vec<PositionedToken> {
+            self.into_iter()
+                .enumerate()
+                .map(|(i, t)| t.at(i, 0))
+                .collect()
         }
     }
 

@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::Deref;
 
-use super::error::FormulaError;
+use super::error::{FormulaError, PositionedFormulaError};
 use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, PositionedToken, Token};
 use super::numeric::Numeric;
 
@@ -85,6 +85,7 @@ impl fmt::Display for ParseItem {
     }
 }
 
+#[derive(Debug)]
 pub struct Parser {
     parsed_expression: Vec<ParseItem>,
 }
@@ -92,6 +93,12 @@ pub struct Parser {
 macro_rules! error {
     ($($arg:tt)*) => {{
         return Err(FormulaError::ParserError(format!($($arg)*)))
+    }}
+}
+
+macro_rules! error2 {
+    ($offset:expr, $($arg:tt)*) => {{
+        return Err(FormulaError::ParserError(format!($($arg)*)).at($offset))
     }}
 }
 
@@ -112,12 +119,12 @@ impl TermExpectation {
 }
 
 impl Parser {
-    pub fn new(tokens: &[PositionedToken]) -> Result<Self, FormulaError> {
+    pub fn new(tokens: &[PositionedToken]) -> Result<Self, PositionedFormulaError> {
         let mut it = tokens.iter().peekable();
         let parsed_expression = Self::expression(&mut it, 0, TermExpectation::Unlimited)?;
 
-        if it.next().is_some() {
-            error!("unparsed tokens at end of expression");
+        if let Some(token) = it.next() {
+            error2!(token.start, "unparsed tokens at end of expression");
         }
 
         Ok(Self { parsed_expression })
@@ -127,7 +134,7 @@ impl Parser {
         it: &mut PeekableToken,
         min_bp: u8,
         limit: TermExpectation,
-    ) -> Result<Vec<ParseItem>, FormulaError> {
+    ) -> Result<Vec<ParseItem>, PositionedFormulaError> {
         let mut result = vec![];
 
         match it.next().map(|t| &t.token) {
@@ -139,7 +146,7 @@ impl Parser {
             }
             Some(Token::Identifier(name)) => {
                 if let Some(Token::Bracket(LexerBracket::RoundOpen)) = it.peek().map(|t| &t.token) {
-                    let (function, params) = Self::function_item(name)?;
+                    let (function, params) = Self::function_item(name).map_err(|e| e.at(0))?;
                     let bp = Self::function_binding_power();
 
                     result.extend(Self::expression(it, bp, TermExpectation::Exact(params, 1))?);
@@ -152,7 +159,7 @@ impl Parser {
                 let op = match op {
                     LexerOperator::Plus => Operator::Pos,
                     LexerOperator::Minus => Operator::Neg,
-                    _ => error!("unsupported unary operator: {}", op),
+                    _ => error2!(0, "unsupported unary operator: {}", op),
                 };
                 let bp = Self::prefix_binding_power(&op);
 
@@ -164,11 +171,11 @@ impl Parser {
                 match it.next().map(|t| &t.token) {
                     Some(Token::Bracket(LexerBracket::RoundClose)) => (),
                     Some(x) => panic!("expected closing bracket, found: {}", x),
-                    None => error!("expected closing bracket, found end of expression"),
+                    None => error2!(0, "expected closing bracket, found end of expression"),
                 }
             }
-            Some(token) => error!("unsupported start token: {}", token),
-            None => error!("unexpected end of expression"),
+            Some(token) => error2!(0, "unsupported start token: {}", token),
+            None => error2!(0, "unexpected end of expression"),
         };
 
         let mut terms = 1;
@@ -176,7 +183,7 @@ impl Parser {
             match it.peek().map(|t| &t.token) {
                 Some(Token::Bracket(LexerBracket::RoundClose)) => match limit {
                     TermExpectation::Exact(expected, 0) if terms != expected => {
-                        error!("expected {} terms, found {}", expected, terms)
+                        error2!(0, "expected {} terms, found {}", expected, terms)
                     }
                     _ => break,
                 },
@@ -217,7 +224,7 @@ impl Parser {
                     }
                     result.push(ParseItem::Operator(op));
                 }
-                Some(token) => error!("unsupported continuation token: {}", token),
+                Some(token) => error2!(0, "unsupported continuation token: {}", token),
                 None => break,
             };
         }
@@ -276,6 +283,7 @@ impl Deref for Parser {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use super::super::error::FormulaError::ParserError;
     use super::super::quoted_string::Quotable;
     use super::*;
     use itertools::Itertools;
@@ -541,15 +549,21 @@ pub(crate) mod tests {
 
     #[test]
     fn parse_invalid() {
-        assert!(Parser::new(&vec![Token::Operator(LexerOperator::Plus)].anywhere()).is_err());
-        assert!(Parser::new(
+        let error =
+            Parser::new(&vec![Token::Operator(LexerOperator::Plus)].at_their_index()).unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 0);
+
+        let error = Parser::new(
             &vec![
                 Token::Number(1.0.into()),
-                Token::Bracket(LexerBracket::RoundClose)
+                Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere()
+            .at_their_index(),
         )
-        .is_err());
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 1);
     }
 
     proptest! {
@@ -771,7 +785,8 @@ pub(crate) mod tests {
 
     #[test]
     fn parse_wrong_parameter_number() {
-        assert!(Parser::new(
+        // too many parameters for sqrt
+        let error = Parser::new(
             &vec![
                 Token::Identifier("sqrt".to_owned()),
                 Token::Bracket(LexerBracket::RoundOpen),
@@ -780,11 +795,14 @@ pub(crate) mod tests {
                 Token::Number(2.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere()
+            .at_their_index(),
         )
-        .is_err());
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 3);
 
-        assert!(Parser::new(
+        // too many parameters for round
+        let error = Parser::new(
             &vec![
                 Token::Identifier("round".to_owned()),
                 Token::Bracket(LexerBracket::RoundOpen),
@@ -795,20 +813,25 @@ pub(crate) mod tests {
                 Token::Number(3.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere()
+            .anywhere(),
         )
-        .is_err());
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 5);
 
-        assert!(Parser::new(
+        // too few parameters for round
+        let error = Parser::new(
             &vec![
                 Token::Identifier("round".to_owned()),
                 Token::Bracket(LexerBracket::RoundOpen),
                 Token::Number(1.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere()
+            .anywhere(),
         )
-        .is_err());
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 3);
     }
 
     #[test]
