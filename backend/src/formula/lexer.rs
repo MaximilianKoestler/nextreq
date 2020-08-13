@@ -185,7 +185,8 @@ impl Lexer {
                 x if x.is_whitespace() => {}
                 _ => {
                     return Err(
-                        FormulaError::LexerError(format!("unexpected symbol: {}", c)).at(offset),
+                        FormulaError::LexerError(format!("unexpected symbol: {}", c))
+                            .at(offset as isize),
                     )
                 }
             };
@@ -204,7 +205,9 @@ impl Lexer {
         numeric
             .parse()
             .map(|n| (n, numeric.chars().count()))
-            .map_err(|err: ParseError| FormulaError::LexerError(err.to_string()).at(offset))
+            .map_err(|err: ParseError| {
+                FormulaError::LexerError(err.to_string()).at(offset as isize)
+            })
     }
 
     fn get_literal<'a>(
@@ -226,7 +229,7 @@ impl Lexer {
         } else {
             Err(
                 FormulaError::LexerError("literal not terminated by \"".to_owned())
-                    .at(offset + literal.chars().count() + 1),
+                    .at((offset + literal.chars().count() + 1) as isize),
             )
         }
     }

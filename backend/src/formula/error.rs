@@ -22,7 +22,7 @@ impl fmt::Display for FormulaError {
 #[derive(Debug, Clone)]
 pub struct PositionedFormulaError {
     pub error: FormulaError,
-    pub offset: usize,
+    pub offset: isize,
 }
 
 impl fmt::Display for PositionedFormulaError {
@@ -32,7 +32,7 @@ impl fmt::Display for PositionedFormulaError {
 }
 
 impl FormulaError {
-    pub fn at(self, offset: usize) -> PositionedFormulaError {
+    pub fn at(self, offset: isize) -> PositionedFormulaError {
         PositionedFormulaError {
             error: self,
             offset,

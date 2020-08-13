@@ -90,9 +90,9 @@ pub struct Parser {
     parsed_expression: Vec<ParseItem>,
 }
 
-macro_rules! error2 {
+macro_rules! error {
     ($offset:expr, $($arg:tt)*) => {{
-        return Err(FormulaError::ParserError(format!($($arg)*)).at($offset))
+        return Err(FormulaError::ParserError(format!($($arg)*)).at($offset as isize))
     }}
 }
 
@@ -118,7 +118,7 @@ impl Parser {
         let parsed_expression = Self::expression(&mut it, 0, TermExpectation::Unlimited)?;
 
         if let Some(token) = it.next() {
-            error2!(token.start, "unparsed tokens at end of expression");
+            error!(token.start, "unparsed tokens at end of expression");
         }
 
         Ok(Self { parsed_expression })
@@ -139,7 +139,8 @@ impl Parser {
                     if let Some(Token::Bracket(LexerBracket::RoundOpen)) =
                         it.peek().map(|t| &t.token)
                     {
-                        let (function, params) = Self::function_item(name).map_err(|e| e.at(0))?;
+                        let (function, params) =
+                            Self::function_item(name).map_err(|e| e.at(token.start as isize))?;
                         let bp = Self::function_binding_power();
 
                         result.extend(Self::expression(it, bp, TermExpectation::Exact(params, 1))?);
@@ -152,7 +153,7 @@ impl Parser {
                     let op = match op {
                         LexerOperator::Plus => Operator::Pos,
                         LexerOperator::Minus => Operator::Neg,
-                        _ => error2!(0, "unsupported unary operator: {}", op),
+                        _ => error!(token.start, "unsupported unary operator: {}", op),
                     };
                     let bp = Self::prefix_binding_power(&op);
 
@@ -164,12 +165,15 @@ impl Parser {
                     match it.next().map(|t| &t.token) {
                         Some(Token::Bracket(LexerBracket::RoundClose)) => (),
                         Some(x) => panic!("expected closing bracket, found: {}", x),
-                        None => error2!(0, "expected closing bracket, found end of expression"),
+                        None => error!(
+                            token.start,
+                            "expected closing bracket, found end of expression"
+                        ),
                     }
                 }
-                token => error2!(0, "unsupported start token: {}", token),
+                _ => error!(token.start, "unsupported start token: {}", token.token),
             },
-            None => error2!(0, "unexpected end of expression"),
+            None => error!(-1, "unexpected end of expression"),
         };
 
         let mut terms = 1;
@@ -178,7 +182,7 @@ impl Parser {
                 Some(token) => match &token.token {
                     Token::Bracket(LexerBracket::RoundClose) => match limit {
                         TermExpectation::Exact(expected, 0) if terms != expected => {
-                            error2!(token.start, "expected {} terms, found {}", expected, terms)
+                            error!(token.start, "expected {} terms, found {}", expected, terms)
                         }
                         _ => break,
                     },
@@ -219,7 +223,10 @@ impl Parser {
                         }
                         result.push(ParseItem::Operator(op));
                     }
-                    token => error2!(0, "unsupported continuation token: {}", token),
+                    _ => error!(
+                        token.start,
+                        "unsupported continuation token: {}", token.token
+                    ),
                 },
                 None => break,
             };
@@ -554,7 +561,7 @@ pub(crate) mod tests {
         let error =
             Parser::new(&vec![Token::Operator(LexerOperator::Plus)].at_their_index()).unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.offset, 0);
+        assert_eq!(error.offset, -1);
 
         // random closing bracket at the end
         let error = Parser::new(
@@ -563,6 +570,81 @@ pub(crate) mod tests {
                 Token::Bracket(LexerBracket::RoundClose),
             ]
             .at_their_index(),
+        )
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 1);
+
+        // non-existent function
+        let error = Parser::new(
+            &vec![
+                Token::Operator(LexerOperator::Minus),
+                Token::Identifier("my_func".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 1);
+
+        // * is not an unary operator
+        let error = Parser::new(
+            &vec![
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Minus),
+                Token::Operator(LexerOperator::Star),
+                Token::Number(1.0.into()),
+            ]
+            .at_their_index(),
+        )
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 2);
+
+        // missing closing bracket
+        let error = Parser::new(
+            &vec![
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+            ]
+            .at_their_index(),
+        )
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 2);
+
+        // closing bracket is not a valid start of an expression
+        let error = Parser::new(
+            &vec![
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 2);
+
+        // expression ends unexpectedly
+        let error = Parser::new(
+            &vec![
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Plus),
+            ]
+            .at_their_index(),
+        )
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, -1);
+
+        // missing operator between values
+        let error = Parser::new(
+            &vec![Token::Number(1.0.into()), Token::Number(1.0.into())].at_their_index(),
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
