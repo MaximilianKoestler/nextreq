@@ -90,12 +90,6 @@ pub struct Parser {
     parsed_expression: Vec<ParseItem>,
 }
 
-macro_rules! error {
-    ($($arg:tt)*) => {{
-        return Err(FormulaError::ParserError(format!($($arg)*)))
-    }}
-}
-
 macro_rules! error2 {
     ($offset:expr, $($arg:tt)*) => {{
         return Err(FormulaError::ParserError(format!($($arg)*)).at($offset))
@@ -270,7 +264,12 @@ impl Parser {
             "sqrt" => (Function::Sqrt, 1),
             "abs" => (Function::Abs, 1),
             "round" => (Function::Round, 2),
-            _ => error!("unsupported function: {}", name),
+            _ => {
+                return Err(FormulaError::ParserError(format!(
+                    "unsupported function: {}",
+                    name
+                )))
+            }
         })
     }
 }
@@ -550,12 +549,14 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn parse_invalid() {
+    fn parse_errors() {
+        // operator followed by nothing
         let error =
             Parser::new(&vec![Token::Operator(LexerOperator::Plus)].at_their_index()).unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.offset, 0);
 
+        // random closing bracket at the end
         let error = Parser::new(
             &vec![
                 Token::Number(1.0.into()),
@@ -566,6 +567,54 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.offset, 1);
+
+        // too many parameters for sqrt
+        let error = Parser::new(
+            &vec![
+                Token::Identifier("sqrt".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(2.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 5);
+
+        // too many parameters for round
+        let error = Parser::new(
+            &vec![
+                Token::Identifier("round".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(2.0.into()),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(3.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 7);
+
+        // too few parameters for round
+        let error = Parser::new(
+            &vec![
+                Token::Identifier("round".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap_err();
+        assert!(matches!(error.error, ParserError(_)));
+        assert_eq!(error.offset, 3);
     }
 
     proptest! {
@@ -783,57 +832,6 @@ pub(crate) mod tests {
         )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1.5 2 round"));
-    }
-
-    #[test]
-    fn parse_wrong_parameter_number() {
-        // too many parameters for sqrt
-        let error = Parser::new(
-            &vec![
-                Token::Identifier("sqrt".to_owned()),
-                Token::Bracket(LexerBracket::RoundOpen),
-                Token::Number(1.0.into()),
-                Token::Operator(LexerOperator::Comma),
-                Token::Number(2.0.into()),
-                Token::Bracket(LexerBracket::RoundClose),
-            ]
-            .at_their_index(),
-        )
-        .unwrap_err();
-        assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.offset, 5);
-
-        // too many parameters for round
-        let error = Parser::new(
-            &vec![
-                Token::Identifier("round".to_owned()),
-                Token::Bracket(LexerBracket::RoundOpen),
-                Token::Number(1.0.into()),
-                Token::Operator(LexerOperator::Comma),
-                Token::Number(2.0.into()),
-                Token::Operator(LexerOperator::Comma),
-                Token::Number(3.0.into()),
-                Token::Bracket(LexerBracket::RoundClose),
-            ]
-            .at_their_index(),
-        )
-        .unwrap_err();
-        assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.offset, 7);
-
-        // too few parameters for round
-        let error = Parser::new(
-            &vec![
-                Token::Identifier("round".to_owned()),
-                Token::Bracket(LexerBracket::RoundOpen),
-                Token::Number(1.0.into()),
-                Token::Bracket(LexerBracket::RoundClose),
-            ]
-            .at_their_index(),
-        )
-        .unwrap_err();
-        assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.offset, 3);
     }
 
     #[test]
