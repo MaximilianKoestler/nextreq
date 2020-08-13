@@ -1,10 +1,12 @@
 use std::fmt;
 
-use crate::formula::{error::FormulaError, Formula, Value, Value::Literal, Value::Number};
+use crate::formula::{
+    error::PositionedFormulaError, Formula, Value, Value::Literal, Value::Number,
+};
 
 #[derive(Debug, Clone)]
 pub enum PropertyError {
-    FormulaError(FormulaError),
+    FormulaError(PositionedFormulaError),
     NoMatchError(String),
 }
 
@@ -54,7 +56,7 @@ pub struct FormulaProperty {
 }
 
 impl FormulaProperty {
-    pub fn new(formula: &str, unit: Option<&str>) -> Result<Self, FormulaError> {
+    pub fn new(formula: &str, unit: Option<&str>) -> Result<Self, PositionedFormulaError> {
         Ok(Self {
             formula: Formula::new(formula)?,
             unit: unit.map(ToOwned::to_owned),

@@ -11,7 +11,7 @@ use std::iter::repeat;
 use std::ops::{Add, Mul};
 use std::time::{Duration, Instant};
 
-use error::FormulaError;
+use error::{FormulaError, PositionedFormulaError};
 use numeric::Numeric;
 use quoted_string::Quotable;
 
@@ -21,9 +21,12 @@ pub struct Formula {
 
 macro_rules! take {
     ($stack:ident) => {
-        ($stack).pop().ok_or(FormulaError::EvaluationError(
-            "expected value, found empty stack".to_owned(),
-        ))?;
+        ($stack)
+            .pop()
+            .ok_or(FormulaError::EvaluationError(
+                "expected value, found empty stack".to_owned(),
+            ))
+            .map_err(|e| e.at(0))?;
     };
 }
 
@@ -33,11 +36,21 @@ macro_rules! error {
     }}
 }
 
+macro_rules! error2 {
+    ($offset:expr, $($arg:tt)*) => {{
+        return Err(FormulaError::EvaluationError(format!($($arg)*)).at($offset as isize))
+    }}
+}
+
 macro_rules! enforce_number {
     ($description:literal, $var:ident) => {
         match $var {
             Number(value) => value,
-            Literal(_) => error!("the {} is not supported for string literals", $description),
+            Literal(_) => error2!(
+                0,
+                "the {} is not supported for string literals",
+                $description
+            ),
         }
     };
 
@@ -45,11 +58,19 @@ macro_rules! enforce_number {
         (
             match $var1 {
                 Number(value) => value,
-                Literal(_) => error!("the {} is not supported for string literals", $description),
+                Literal(_) => error2!(
+                    0,
+                    "the {} is not supported for string literals",
+                    $description
+                ),
             },
             match $var2 {
                 Number(value) => value,
-                Literal(_) => error!("the {} is not supported for string literals", $description),
+                Literal(_) => error2!(
+                    0,
+                    "the {} is not supported for string literals",
+                    $description
+                ),
             },
         )
     };
@@ -131,21 +152,21 @@ impl Mul for Value {
 }
 
 impl Formula {
-    pub fn new(input: &str) -> Result<Self, FormulaError> {
-        let lexer = lexer::Lexer::new(input).map_err(|e| e.error)?;
-        let parser = parser::Parser::new(&lexer[..]).map_err(|e| e.error)?;
+    pub fn new(input: &str) -> Result<Self, PositionedFormulaError> {
+        let lexer = lexer::Lexer::new(input)?;
+        let parser = parser::Parser::new(&lexer[..])?;
         Ok(Self { parser })
     }
 
-    pub fn eval(&self) -> Result<Value, FormulaError> {
+    pub fn eval(&self) -> Result<Value, PositionedFormulaError> {
         self.eval_internal(None)
     }
 
-    pub fn eval_with(&self, vars: &VariableDict) -> Result<Value, FormulaError> {
+    pub fn eval_with(&self, vars: &VariableDict) -> Result<Value, PositionedFormulaError> {
         self.eval_internal(Some(vars))
     }
 
-    fn eval_internal(&self, vars: Option<&VariableDict>) -> Result<Value, FormulaError> {
+    fn eval_internal(&self, vars: Option<&VariableDict>) -> Result<Value, PositionedFormulaError> {
         // TODO: move to lazy_static block or somewhere else
         let global_constants = {
             use std::f64::consts;
@@ -162,7 +183,8 @@ impl Formula {
         let mut stack: Vec<Value> = vec![];
         for item in self.parser.iter() {
             if start.elapsed() > timeout {
-                error!(
+                error2!(
+                    0,
                     "timeout exceeded ({:?} out of {:?})",
                     start.elapsed(),
                     timeout
@@ -182,7 +204,8 @@ impl Formula {
                             .ok_or(FormulaError::EvaluationError(format!(
                                 "variable '{}' not found",
                                 name
-                            )))?
+                            )))
+                            .map_err(|e| e.at(0))?
                             .clone();
                         stack.push(Number(var));
                     }
@@ -191,7 +214,7 @@ impl Formula {
                     parser::Operator::Add => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push((lhs + rhs)?);
+                        stack.push((lhs + rhs).map_err(|e| e.at(0))?);
                     }
                     parser::Operator::Sub => {
                         let rhs = take!(stack);
@@ -202,20 +225,20 @@ impl Formula {
                     parser::Operator::Mul => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push((lhs * rhs)?);
+                        stack.push((lhs * rhs).map_err(|e| e.at(0))?);
                     }
                     parser::Operator::Div => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
                         let (rhs, lhs) = enforce_number!("division operator", rhs, lhs);
-                        stack.push(Number((lhs / rhs)?));
+                        stack.push(Number((lhs / rhs).map_err(|e| e.at(0))?));
                     }
                     parser::Operator::Pow => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
                         let (rhs, lhs) = enforce_number!("power operator", rhs, lhs);
 
-                        stack.push(Number(lhs.pow(&rhs)?));
+                        stack.push(Number(lhs.pow(&rhs).map_err(|e| e.at(0))?));
                     }
                     parser::Operator::Pos => {}
                     parser::Operator::Neg => {
@@ -226,14 +249,14 @@ impl Formula {
                     parser::Operator::Fac => {
                         let lhs = take!(stack);
                         let lhs = enforce_number!("factorial operator", lhs);
-                        stack.push(Number(lhs.factorial()?));
+                        stack.push(Number(lhs.factorial().map_err(|e| e.at(0))?));
                     }
                 },
                 parser::ParseItem::Function(f, _) => match f {
                     parser::Function::Sqrt => {
                         let param = take!(stack);
                         let param = enforce_number!("sqrt function", param);
-                        stack.push(Number(param.sqrt()?));
+                        stack.push(Number(param.sqrt().map_err(|e| e.at(0))?));
                     }
                     parser::Function::Abs => {
                         let param = take!(stack);
@@ -245,7 +268,7 @@ impl Formula {
                         let value = take!(stack);
                         let (precision, value) =
                             enforce_number!("round function", precision, value);
-                        stack.push(Number(value.round(&precision)?));
+                        stack.push(Number(value.round(&precision).map_err(|e| e.at(0))?));
                     }
                 },
             }
@@ -255,7 +278,8 @@ impl Formula {
             Err(FormulaError::EvaluationError(format!(
                 "expected exactly one item, found {}",
                 stack.len()
-            )))
+            ))
+            .at(0))
         } else {
             Ok(stack.pop().unwrap())
         }

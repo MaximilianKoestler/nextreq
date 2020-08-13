@@ -27,7 +27,7 @@ pub struct PositionedFormulaError {
 
 impl fmt::Display for PositionedFormulaError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} at offset {}", self.error, self.offset)
+        write!(f, "{} (originating at offset {})", self.error, self.offset)
     }
 }
 
