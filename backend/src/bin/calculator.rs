@@ -42,7 +42,15 @@ fn main() {
                     nextreq::formula::Value::Literal(_) => {}
                 };
             }
-            Err(err) => println!("{}", err),
+            Err(err) => {
+                let offset = match err.offset {
+                    -1 => (input.chars().count() - 1) as isize,
+                    _ => err.offset - 1,
+                };
+                let indentation = (0..=(offset + 6)).map(|_| ' ').collect::<String>();
+                println!("{}^", indentation);
+                println!("{}", err.error);
+            }
         }
     }
 }
