@@ -1,11 +1,24 @@
 <template>
-  <input type="text" v-model="formula" v-on:input="debounceListener" />
+  <textarea
+    class="editor"
+    spellcheck="false"
+    v-model="formula"
+    v-on:input="debounceListener"
+  />
+
+  <div
+    class="editor disabled"
+    contenteditable="false"
+    spellcheck="false"
+    v-html="styledFormula"
+  ></div>
+
   <div>
     <span v-if="computedResult.value !== undefined">{{
       computedResult.value
     }}</span>
     <span v-else-if="computedResult.error !== undefined" class="error">{{
-      computedResult.error
+      computedResult.error.message
     }}</span>
     <span v-else>...</span>
   </div>
@@ -31,9 +44,15 @@ const apolloClient = new ApolloClient({
   cache,
 });
 
+interface Error {
+  message: string;
+  offset: number;
+}
+
 interface Result {
+  input: string;
   value?: string;
-  error?: string;
+  error?: Error;
 }
 
 export default defineComponent({
@@ -42,41 +61,83 @@ export default defineComponent({
     const formula = ref("");
     const debouncedFormula = ref("");
 
-    const computedResult: Ref<Result> = ref({ value: "" });
+    const computedResult: Ref<Result> = ref({
+      input: formula.value,
+      value: "",
+    });
+
+    const styledFormula = computed(() => {
+      let formula = computedResult.value.input;
+      if (computedResult.value.error !== undefined) {
+        let offset = computedResult.value.error.offset;
+        if (offset == -1) {
+          offset = formula.length;
+          formula = formula + " ";
+        }
+        const result =
+          formula.slice(0, offset) +
+          "<span style='color: red; text-decoration: underline; white-space: pre;'>" +
+          formula.slice(offset, offset + 1) +
+          "</span>" +
+          formula.slice(offset + 1);
+        return result;
+      } else {
+        return formula;
+      }
+    });
+
+    const formulaAsText = computed(() => {
+      const div = document.createElement("div");
+      div.innerHTML = styledFormula.value;
+      return div.textContent || div.innerText || "";
+    });
 
     let timeoutRef: NodeJS.Timeout | null = null;
-    const debounceListener = (e: any) => {
+    const debounceListener = () => {
       if (timeoutRef !== null) {
         clearTimeout(timeoutRef);
       }
 
-      formula.value = e.target.value;
       timeoutRef = setTimeout(() => {
-        debouncedFormula.value = e.target.value;
+        debouncedFormula.value = formula.value;
       }, 800);
     };
 
     watch(debouncedFormula, (newFormula) => {
-      computedResult.value = {};
+      computedResult.value = { input: debouncedFormula.value };
 
       apolloClient
         .query({
           query: gql`
-          query {
-            calculate(input: "${newFormula}")
-          }
-        `,
+            query Calculate($input: String!) {
+              calculate(input: $input)
+            }
+          `,
+          variables: { input: newFormula },
         })
         .then((response) => {
-          computedResult.value = { value: response.data.calculate };
+          computedResult.value = {
+            input: debouncedFormula.value,
+            value: response.data.calculate,
+          };
         })
         .catch((error) => {
           if (error.graphQLErrors.length == 1) {
-            computedResult.value = { error: error.graphQLErrors[0].message };
+            const gqlError = error.graphQLErrors[0];
+            computedResult.value = {
+              input: debouncedFormula.value,
+              error: {
+                message: gqlError.message,
+                offset: gqlError.extensions.offset,
+              },
+            };
           } else if (error.networkError !== undefined) {
-            computedResult.value = { error: error.networkError };
+            computedResult.value = {
+              input: debouncedFormula.value,
+              error: error.networkError,
+            };
           } else {
-            computedResult.value = { error };
+            computedResult.value = { input: debouncedFormula.value, error };
           }
         });
     });
@@ -85,6 +146,7 @@ export default defineComponent({
       debounceListener,
       formula,
       computedResult,
+      styledFormula,
     };
   },
 });
@@ -93,5 +155,17 @@ export default defineComponent({
 <style scoped lang="scss">
 .error {
   color: red;
+}
+
+.editor {
+  font: inherit;
+  border: 1px solid grey;
+  height: 100px;
+  width: 300px;
+  padding: 10px;
+}
+
+.disabled {
+  background-color: #e2e2e2;
 }
 </style>

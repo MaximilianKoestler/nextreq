@@ -13,3 +13,9 @@ export default defineComponent({
   name: "App",
 });
 </script>
+
+<style lang="scss">
+body {
+  font-family: Arial, Verdana, sans-serif;
+}
+</style>
