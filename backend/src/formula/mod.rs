@@ -26,7 +26,7 @@ macro_rules! take {
             .ok_or(FormulaError::EvaluationError(
                 "expected value, found empty stack".to_owned(),
             ))
-            .map_err(|e| e.at(0))?;
+            .map_err(|e| e.at(-1))?;
     };
 }
 
@@ -36,38 +36,38 @@ macro_rules! error {
     }}
 }
 
-macro_rules! error2 {
+macro_rules! error_at {
     ($offset:expr, $($arg:tt)*) => {{
         return Err(FormulaError::EvaluationError(format!($($arg)*)).at($offset as isize))
     }}
 }
 
 macro_rules! enforce_number {
-    ($description:literal, $var:ident) => {
+    ($offset:expr, $description:literal, $var:ident) => {
         match $var {
             Number(value) => value,
-            Literal(_) => error2!(
-                0,
+            Literal(_) => error_at!(
+                $offset,
                 "the {} is not supported for string literals",
                 $description
             ),
         }
     };
 
-    ($description:literal, $var1:ident, $var2:ident) => {
+    ($offset:expr, $description:literal, $var1:ident, $var2:ident) => {
         (
             match $var1 {
                 Number(value) => value,
-                Literal(_) => error2!(
-                    0,
+                Literal(_) => error_at!(
+                    $offset,
                     "the {} is not supported for string literals",
                     $description
                 ),
             },
             match $var2 {
                 Number(value) => value,
-                Literal(_) => error2!(
-                    0,
+                Literal(_) => error_at!(
+                    $offset,
                     "the {} is not supported for string literals",
                     $description
                 ),
@@ -177,16 +177,18 @@ impl Formula {
             map
         };
 
-        let start = Instant::now();
+        let start_time = Instant::now();
         let timeout = Duration::from_millis(500);
 
         let mut stack: Vec<Value> = vec![];
         for item in self.parser.iter() {
-            if start.elapsed() > timeout {
-                error2!(
-                    0,
+            let start = item.start as isize;
+
+            if start_time.elapsed() > timeout {
+                error_at!(
+                    start,
                     "timeout exceeded ({:?} out of {:?})",
-                    start.elapsed(),
+                    start_time.elapsed(),
                     timeout
                 );
             }
@@ -206,7 +208,7 @@ impl Formula {
                                     "variable '{}' not found",
                                     name
                                 ))
-                                .at(item.start as isize),
+                                .at(start),
                             )?
                             .clone();
                         stack.push(Number(var));
@@ -216,61 +218,61 @@ impl Formula {
                     parser::Operator::Add => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push((lhs + rhs).map_err(|e| e.at(item.start as isize))?);
+                        stack.push((lhs + rhs).map_err(|e| e.at(start))?);
                     }
                     parser::Operator::Sub => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        let (rhs, lhs) = enforce_number!("subtraction operator", rhs, lhs);
+                        let (rhs, lhs) = enforce_number!(start, "subtraction operator", rhs, lhs);
                         stack.push(Number(lhs - rhs));
                     }
                     parser::Operator::Mul => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push((lhs * rhs).map_err(|e| e.at(item.start as isize))?);
+                        stack.push((lhs * rhs).map_err(|e| e.at(start))?);
                     }
                     parser::Operator::Div => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        let (rhs, lhs) = enforce_number!("division operator", rhs, lhs);
-                        stack.push(Number((lhs / rhs).map_err(|e| e.at(item.start as isize))?));
+                        let (rhs, lhs) = enforce_number!(start, "division operator", rhs, lhs);
+                        stack.push(Number((lhs / rhs).map_err(|e| e.at(start))?));
                     }
                     parser::Operator::Pow => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        let (rhs, lhs) = enforce_number!("power operator", rhs, lhs);
+                        let (rhs, lhs) = enforce_number!(start, "power operator", rhs, lhs);
 
-                        stack.push(Number(lhs.pow(&rhs).map_err(|e| e.at(0))?));
+                        stack.push(Number(lhs.pow(&rhs).map_err(|e| e.at(start))?));
                     }
                     parser::Operator::Pos => {}
                     parser::Operator::Neg => {
                         let rhs = take!(stack);
-                        let rhs = enforce_number!("negation operator", rhs);
+                        let rhs = enforce_number!(start, "negation operator", rhs);
                         stack.push(Number(-rhs));
                     }
                     parser::Operator::Fac => {
                         let lhs = take!(stack);
-                        let lhs = enforce_number!("factorial operator", lhs);
-                        stack.push(Number(lhs.factorial().map_err(|e| e.at(0))?));
+                        let lhs = enforce_number!(start, "factorial operator", lhs);
+                        stack.push(Number(lhs.factorial().map_err(|e| e.at(start))?));
                     }
                 },
                 parser::ParseItem::Function(f, _) => match f {
                     parser::Function::Sqrt => {
                         let param = take!(stack);
-                        let param = enforce_number!("sqrt function", param);
-                        stack.push(Number(param.sqrt().map_err(|e| e.at(0))?));
+                        let param = enforce_number!(start, "sqrt function", param);
+                        stack.push(Number(param.sqrt().map_err(|e| e.at(start))?));
                     }
                     parser::Function::Abs => {
                         let param = take!(stack);
-                        let param = enforce_number!("abs function", param);
+                        let param = enforce_number!(start, "abs function", param);
                         stack.push(Number(param.abs()));
                     }
                     parser::Function::Round => {
                         let precision = take!(stack);
                         let value = take!(stack);
                         let (precision, value) =
-                            enforce_number!("round function", precision, value);
-                        stack.push(Number(value.round(&precision).map_err(|e| e.at(0))?));
+                            enforce_number!(start, "round function", precision, value);
+                        stack.push(Number(value.round(&precision).map_err(|e| e.at(start))?));
                     }
                 },
             }
@@ -281,7 +283,7 @@ impl Formula {
                 "expected exactly one item, found {}",
                 stack.len()
             ))
-            .at(0))
+            .at(-1))
         } else {
             Ok(stack.pop().unwrap())
         }
@@ -507,6 +509,25 @@ mod tests {
         let error = Formula::new("0 / (1 - 1)").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
         assert_eq!(error.offset, 2);
+
+        let error = Formula::new("10 ^ 10000").unwrap().eval().unwrap_err();
+        assert!(matches!(error.error, NumericError(_)));
+        assert_eq!(error.offset, 3);
+
+        let error = Formula::new("(-1)!").unwrap().eval().unwrap_err();
+        assert!(matches!(error.error, NumericError(_)));
+        assert_eq!(error.offset, 4);
+
+        let error = Formula::new("1 + sqrt(-1)").unwrap().eval().unwrap_err();
+        assert!(matches!(error.error, NumericError(_)));
+        assert_eq!(error.offset, 4);
+
+        let error = Formula::new("1 + round(3.0, -1)")
+            .unwrap()
+            .eval()
+            .unwrap_err();
+        assert!(matches!(error.error, NumericError(_)));
+        assert_eq!(error.offset, 4);
     }
 
     proptest! {
@@ -545,9 +566,9 @@ mod tests {
                 vars.insert(var, 0.0.into());
             }
 
-            let start = Instant::now();
+            let start_time = Instant::now();
             let _ = formula.eval_with(&vars);
-            let duration = start.elapsed();
+            let duration = start_time.elapsed();
 
             let score = duration.as_nanos() / infix_str.len() as u128;
             results.push((infix_str, duration, score));
