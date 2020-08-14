@@ -328,6 +328,10 @@ pub(crate) mod tests {
         fn postfix(&self) -> String {
             self.iter().map(|p| p.to_string()).join(" ")
         }
+
+        fn positions(&self) -> Vec<(usize, usize)> {
+            self.iter().map(|p| (p.start, p.length)).collect()
+        }
     }
 
     pub enum TokenTree {
@@ -721,6 +725,12 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.offset, 3);
+    }
+
+    #[test]
+    fn item_positions() {
+        let items = Parser::new(&vec![Token::Number(1.0.into())].at_their_index()).unwrap();
+        // assert_eq!(items.positions(), vec![(0, 1)]);
     }
 
     proptest! {
