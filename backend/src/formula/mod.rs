@@ -191,7 +191,7 @@ impl Formula {
                 );
             }
 
-            match item {
+            match &item.item {
                 parser::ParseItem::Value(v) => match v {
                     parser::Value::Number(value) => stack.push(Number(value.clone())),
                     parser::Value::Literal(text) => stack.push(Literal(text.clone())),

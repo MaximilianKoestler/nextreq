@@ -85,9 +85,32 @@ impl fmt::Display for ParseItem {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct PositionedParseItem {
+    pub item: ParseItem,
+    pub start: usize,
+    pub length: usize,
+}
+
+impl ParseItem {
+    pub fn at(self, start: usize, length: usize) -> PositionedParseItem {
+        PositionedParseItem {
+            item: self,
+            start,
+            length,
+        }
+    }
+}
+
+impl fmt::Display for PositionedParseItem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.item)
+    }
+}
+
 #[derive(Debug)]
 pub struct Parser {
-    parsed_expression: Vec<ParseItem>,
+    parsed_expression: Vec<PositionedParseItem>,
 }
 
 macro_rules! error {
@@ -121,6 +144,7 @@ impl Parser {
             error!(token.start, "unparsed tokens at end of expression");
         }
 
+        let parsed_expression = parsed_expression.into_iter().map(|i| i.at(0, 0)).collect();
         Ok(Self { parsed_expression })
     }
 
@@ -282,7 +306,7 @@ impl Parser {
 }
 
 impl Deref for Parser {
-    type Target = [ParseItem];
+    type Target = [PositionedParseItem];
 
     fn deref(&self) -> &Self::Target {
         &self.parsed_expression
