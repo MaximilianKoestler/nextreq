@@ -1,3 +1,4 @@
+use super::model::CalculatorError;
 use super::view::CalculatorView;
 
 use crate::formula::Formula;
@@ -11,11 +12,14 @@ impl CalculatorInteractor {
 }
 
 impl CalculatorView for CalculatorInteractor {
-    fn calculate(&self, input: &str) -> Result<String, String> {
+    fn calculate(&self, input: &str) -> Result<String, CalculatorError> {
         let formula = Formula::new(input);
         let result = formula.and_then(|f| f.eval());
 
-        result.map(|v| v.to_string()).map_err(|e| e.to_string())
+        result.map(|v| v.to_string()).map_err(|e| CalculatorError {
+            message: e.error.to_string(),
+            offset: e.offset,
+        })
     }
 }
 
