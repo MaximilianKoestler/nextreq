@@ -100,6 +100,14 @@ impl ParseItem {
             length,
         }
     }
+
+    pub fn at_token(self, token: &PositionedToken) -> PositionedParseItem {
+        PositionedParseItem {
+            item: self,
+            start: token.start,
+            length: token.length,
+        }
+    }
 }
 
 impl fmt::Display for PositionedParseItem {
@@ -157,10 +165,10 @@ impl Parser {
         match it.next() {
             Some(token) => match &token.token {
                 Token::Number(value) => {
-                    result.push(ParseItem::Value(Value::Number(value.clone())).at(0, 0))
+                    result.push(ParseItem::Value(Value::Number(value.clone())).at_token(token))
                 }
                 Token::Literal(text) => {
-                    result.push(ParseItem::Value(Value::Literal(text.clone())).at(0, 0))
+                    result.push(ParseItem::Value(Value::Literal(text.clone())).at_token(token))
                 }
                 Token::Identifier(name) => {
                     if let Some(Token::Bracket(LexerBracket::RoundOpen)) =
@@ -171,9 +179,10 @@ impl Parser {
                         let bp = Self::function_binding_power();
 
                         result.extend(Self::expression(it, bp, TermExpectation::Exact(params, 1))?);
-                        result.push(ParseItem::Function(function, params).at(0, 0));
+                        result.push(ParseItem::Function(function, params).at_token(token));
                     } else {
-                        result.push(ParseItem::Value(Value::Variable(name.clone())).at(0, 0))
+                        result
+                            .push(ParseItem::Value(Value::Variable(name.clone())).at_token(token));
                     }
                 }
                 Token::Operator(op) => {
@@ -185,7 +194,7 @@ impl Parser {
                     let bp = Self::prefix_binding_power(&op);
 
                     result.extend(Self::expression(it, bp, TermExpectation::Unlimited)?);
-                    result.push(ParseItem::Operator(op).at(0, 0));
+                    result.push(ParseItem::Operator(op).at_token(token));
                 }
                 Token::Bracket(LexerBracket::RoundOpen) => {
                     result.extend(Self::expression(it, 0, limit.countdown())?);
@@ -234,6 +243,7 @@ impl Parser {
                             LexerOperator::Comma => panic!("unreachable code"),
                         };
 
+                        let (start, length) = (token.start, token.length);
                         if let Some(l_bp) = Self::postfix_binding_power(&op) {
                             if l_bp < min_bp {
                                 break;
@@ -248,7 +258,7 @@ impl Parser {
                             it.next();
                             result.extend(Self::expression(it, r_bp, TermExpectation::Unlimited)?);
                         }
-                        result.push(ParseItem::Operator(op).at(0, 0));
+                        result.push(ParseItem::Operator(op).at(start, length));
                     }
                     _ => error!(
                         token.start,
@@ -732,8 +742,60 @@ pub(crate) mod tests {
 
     #[test]
     fn item_positions() {
-        let items = Parser::new(&vec![Token::Number(1.0.into())].at_their_index()).unwrap();
-        // assert_eq!(items.positions(), vec![(0, 1)]);
+        let items = Parser::new(
+            &vec![
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Number(1.0.into()),
+            ]
+            .at_their_index(),
+        )
+        .unwrap();
+        assert_eq!(items.positions(), vec![(0, 1), (2, 1), (1, 1)]);
+
+        let items = Parser::new(
+            &vec![
+                Token::Literal("a".to_owned()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Literal("a".to_owned()),
+            ]
+            .at_their_index(),
+        )
+        .unwrap();
+        assert_eq!(items.positions(), vec![(0, 1), (2, 1), (1, 1)]);
+
+        let items = Parser::new(
+            &vec![
+                Token::Identifier("a".to_owned()),
+                Token::Operator(LexerOperator::Plus),
+                Token::Identifier("a".to_owned()),
+            ]
+            .at_their_index(),
+        )
+        .unwrap();
+        assert_eq!(items.positions(), vec![(0, 1), (2, 1), (1, 1)]);
+
+        let items = Parser::new(
+            &vec![
+                Token::Identifier("sqrt".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap();
+        assert_eq!(items.positions(), vec![(2, 1), (0, 1)]);
+
+        let items = Parser::new(
+            &vec![
+                Token::Operator(LexerOperator::Plus),
+                Token::Number(1.0.into()),
+            ]
+            .at_their_index(),
+        )
+        .unwrap();
+        assert_eq!(items.positions(), vec![(1, 1), (0, 1)]);
     }
 
     proptest! {

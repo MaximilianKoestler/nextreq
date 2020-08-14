@@ -377,7 +377,7 @@ pub(crate) mod tests {
         fn at_their_index(self) -> Vec<PositionedToken> {
             self.into_iter()
                 .enumerate()
-                .map(|(i, t)| t.at(i, 0))
+                .map(|(i, t)| t.at(i, 1))
                 .collect()
         }
     }
