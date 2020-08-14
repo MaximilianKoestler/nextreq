@@ -201,11 +201,13 @@ impl Formula {
                             .map(|m| m.get(name))
                             .flatten()
                             .or(global_constants.get(name))
-                            .ok_or(FormulaError::EvaluationError(format!(
-                                "variable '{}' not found",
-                                name
-                            )))
-                            .map_err(|e| e.at(0))?
+                            .ok_or(
+                                FormulaError::EvaluationError(format!(
+                                    "variable '{}' not found",
+                                    name
+                                ))
+                                .at(item.start as isize),
+                            )?
                             .clone();
                         stack.push(Number(var));
                     }
@@ -214,7 +216,7 @@ impl Formula {
                     parser::Operator::Add => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push((lhs + rhs).map_err(|e| e.at(0))?);
+                        stack.push((lhs + rhs).map_err(|e| e.at(item.start as isize))?);
                     }
                     parser::Operator::Sub => {
                         let rhs = take!(stack);
@@ -225,13 +227,13 @@ impl Formula {
                     parser::Operator::Mul => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
-                        stack.push((lhs * rhs).map_err(|e| e.at(0))?);
+                        stack.push((lhs * rhs).map_err(|e| e.at(item.start as isize))?);
                     }
                     parser::Operator::Div => {
                         let rhs = take!(stack);
                         let lhs = take!(stack);
                         let (rhs, lhs) = enforce_number!("division operator", rhs, lhs);
-                        stack.push(Number((lhs / rhs).map_err(|e| e.at(0))?));
+                        stack.push(Number((lhs / rhs).map_err(|e| e.at(item.start as isize))?));
                     }
                     parser::Operator::Pow => {
                         let rhs = take!(stack);
@@ -484,6 +486,27 @@ mod tests {
             Formula::new("round(E, 4)").unwrap().eval().unwrap(),
             rounded(std::f64::consts::E)
         );
+    }
+
+    #[test]
+    fn evaluation_errors() {
+        use FormulaError::{EvaluationError, NumericError};
+
+        let error = Formula::new("1 + a").unwrap().eval().unwrap_err();
+        assert!(matches!(error.error, EvaluationError(_)));
+        assert_eq!(error.offset, 4);
+
+        let error = Formula::new("1 + \"a\"").unwrap().eval().unwrap_err();
+        assert!(matches!(error.error, EvaluationError(_)));
+        assert_eq!(error.offset, 2);
+
+        let error = Formula::new("\"a\" * \"a\"").unwrap().eval().unwrap_err();
+        assert!(matches!(error.error, EvaluationError(_)));
+        assert_eq!(error.offset, 4);
+
+        let error = Formula::new("0 / (1 - 1)").unwrap().eval().unwrap_err();
+        assert!(matches!(error.error, NumericError(_)));
+        assert_eq!(error.offset, 2);
     }
 
     proptest! {
