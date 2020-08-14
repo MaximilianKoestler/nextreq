@@ -144,7 +144,6 @@ impl Parser {
             error!(token.start, "unparsed tokens at end of expression");
         }
 
-        let parsed_expression = parsed_expression.into_iter().map(|i| i.at(0, 0)).collect();
         Ok(Self { parsed_expression })
     }
 
@@ -152,13 +151,17 @@ impl Parser {
         it: &mut PeekableToken,
         min_bp: u8,
         limit: TermExpectation,
-    ) -> Result<Vec<ParseItem>, PositionedFormulaError> {
+    ) -> Result<Vec<PositionedParseItem>, PositionedFormulaError> {
         let mut result = vec![];
 
         match it.next() {
             Some(token) => match &token.token {
-                Token::Number(value) => result.push(ParseItem::Value(Value::Number(value.clone()))),
-                Token::Literal(text) => result.push(ParseItem::Value(Value::Literal(text.clone()))),
+                Token::Number(value) => {
+                    result.push(ParseItem::Value(Value::Number(value.clone())).at(0, 0))
+                }
+                Token::Literal(text) => {
+                    result.push(ParseItem::Value(Value::Literal(text.clone())).at(0, 0))
+                }
                 Token::Identifier(name) => {
                     if let Some(Token::Bracket(LexerBracket::RoundOpen)) =
                         it.peek().map(|t| &t.token)
@@ -168,9 +171,9 @@ impl Parser {
                         let bp = Self::function_binding_power();
 
                         result.extend(Self::expression(it, bp, TermExpectation::Exact(params, 1))?);
-                        result.push(ParseItem::Function(function, params));
+                        result.push(ParseItem::Function(function, params).at(0, 0));
                     } else {
-                        result.push(ParseItem::Value(Value::Variable(name.clone())))
+                        result.push(ParseItem::Value(Value::Variable(name.clone())).at(0, 0))
                     }
                 }
                 Token::Operator(op) => {
@@ -182,7 +185,7 @@ impl Parser {
                     let bp = Self::prefix_binding_power(&op);
 
                     result.extend(Self::expression(it, bp, TermExpectation::Unlimited)?);
-                    result.push(ParseItem::Operator(op));
+                    result.push(ParseItem::Operator(op).at(0, 0));
                 }
                 Token::Bracket(LexerBracket::RoundOpen) => {
                     result.extend(Self::expression(it, 0, limit.countdown())?);
@@ -245,7 +248,7 @@ impl Parser {
                             it.next();
                             result.extend(Self::expression(it, r_bp, TermExpectation::Unlimited)?);
                         }
-                        result.push(ParseItem::Operator(op));
+                        result.push(ParseItem::Operator(op).at(0, 0));
                     }
                     _ => error!(
                         token.start,
