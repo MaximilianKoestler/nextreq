@@ -46,7 +46,8 @@ const apolloClient = new ApolloClient({
 
 interface Error {
   message: string;
-  offset: number;
+  start: number;
+  end: number;
 }
 
 interface Result {
@@ -69,17 +70,23 @@ export default defineComponent({
     const styledFormula = computed(() => {
       let formula = computedResult.value.input;
       if (computedResult.value.error !== undefined) {
-        let offset = computedResult.value.error.offset;
-        if (offset == -1) {
-          offset = formula.length;
+        let start = computedResult.value.error.start;
+        if (start == -1) {
+          start = formula.length;
           formula = formula + " ";
         }
+
+        let end = computedResult.value.error.end;
+        if (end == -1) {
+          end = formula.length;
+        }
+
         const result =
-          formula.slice(0, offset) +
+          formula.slice(0, start) +
           "<span style='color: red; text-decoration: underline; white-space: pre;'>" +
-          formula.slice(offset, offset + 1) +
+          formula.slice(start, end) +
           "</span>" +
-          formula.slice(offset + 1);
+          formula.slice(end + 1);
         return result;
       } else {
         return formula;
@@ -128,7 +135,11 @@ export default defineComponent({
               input: debouncedFormula.value,
               error: {
                 message: gqlError.message,
-                offset: gqlError.extensions.offset,
+                start: gqlError.extensions.offset,
+                end:
+                  gqlError.extensions.offset == -1
+                    ? -1
+                    : gqlError.extensions.offset + 1,
               },
             };
           } else if (error.networkError !== undefined) {
