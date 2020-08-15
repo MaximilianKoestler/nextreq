@@ -625,7 +625,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Known(1));
+        assert_eq!(error.start, Offset(1));
 
         // non-existent function
         let error = Parser::new(
@@ -639,7 +639,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Known(1));
+        assert_eq!(error.start, Offset(1));
 
         // * is not an unary operator
         let error = Parser::new(
@@ -653,7 +653,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Known(2));
+        assert_eq!(error.start, Offset(2));
 
         // missing closing bracket
         let error = Parser::new(
@@ -667,7 +667,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Known(2));
+        assert_eq!(error.start, Offset(2));
 
         // closing bracket is not a valid start of an expression
         let error = Parser::new(
@@ -680,7 +680,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Known(2));
+        assert_eq!(error.start, Offset(2));
 
         // expression ends unexpectedly
         let error = Parser::new(
@@ -700,7 +700,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Known(1));
+        assert_eq!(error.start, Offset(1));
 
         // too many parameters for sqrt
         let error = Parser::new(
@@ -716,7 +716,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Known(5));
+        assert_eq!(error.start, Offset(5));
 
         // too many parameters for round
         let error = Parser::new(
@@ -734,7 +734,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Known(7));
+        assert_eq!(error.start, Offset(7));
 
         // too few parameters for round
         let error = Parser::new(
@@ -748,7 +748,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Known(3));
+        assert_eq!(error.start, Offset(3));
     }
 
     #[test]

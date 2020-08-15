@@ -388,31 +388,31 @@ pub(crate) mod tests {
 
         let error = Lexer::new("$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, Known(0));
+        assert_eq!(error.start, Offset(0));
 
         let error = Lexer::new("123$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, Known(3));
+        assert_eq!(error.start, Offset(3));
 
         let error = Lexer::new("\"abc\"$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, Known(5));
+        assert_eq!(error.start, Offset(5));
 
         let error = Lexer::new("abc$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, Known(3));
+        assert_eq!(error.start, Offset(3));
 
         let error = Lexer::new("1.0.0").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, Known(0));
+        assert_eq!(error.start, Offset(0));
 
         let error = Lexer::new("  2 + 1.0.0").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, Known(6));
+        assert_eq!(error.start, Offset(6));
 
         let error = Lexer::new("\"abc").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, Known(4));
+        assert_eq!(error.start, Offset(4));
     }
 
     proptest! {

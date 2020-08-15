@@ -19,11 +19,11 @@ impl CalculatorView for CalculatorInteractor {
         result.map(|v| v.to_string()).map_err(|e| CalculatorError {
             message: e.error.to_string(),
             start: match e.start {
-                ErrorPosition::Known(position) => position as isize,
+                ErrorPosition::Offset(position) => position as isize,
                 ErrorPosition::End => -1,
             },
             end: match e.end {
-                ErrorPosition::Known(position) => position as isize,
+                ErrorPosition::Offset(position) => position as isize,
                 ErrorPosition::End => -1,
             },
         })

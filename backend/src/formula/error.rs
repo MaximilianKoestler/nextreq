@@ -21,14 +21,14 @@ impl fmt::Display for FormulaError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrorPosition {
-    Known(usize),
+    Offset(usize),
     End,
 }
 
 impl fmt::Display for ErrorPosition {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Self::Known(position) => write!(f, "{}", position),
+            Self::Offset(position) => write!(f, "{}", position),
             Self::End => write!(f, "END"),
         }
     }
@@ -63,12 +63,12 @@ impl FormulaError {
             start: if start == -1 {
                 ErrorPosition::End
             } else {
-                ErrorPosition::Known(start as usize)
+                ErrorPosition::Offset(start as usize)
             },
             end: if start == -1 {
                 ErrorPosition::End
             } else {
-                ErrorPosition::Known(start as usize + 1)
+                ErrorPosition::Offset(start as usize + 1)
             },
         }
     }
@@ -76,8 +76,8 @@ impl FormulaError {
     pub fn at_marker(self, marker: &dyn ErrorMarker) -> PositionedFormulaError {
         PositionedFormulaError {
             error: self,
-            start: ErrorPosition::Known(marker.start()),
-            end: ErrorPosition::Known(marker.end()),
+            start: ErrorPosition::Offset(marker.start()),
+            end: ErrorPosition::Offset(marker.end()),
         }
     }
 }

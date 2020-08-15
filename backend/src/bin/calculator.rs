@@ -48,12 +48,12 @@ fn main() {
 
                 let start = match err.start {
                     ErrorPosition::End => input_length - 1,
-                    ErrorPosition::Known(position) => position,
+                    ErrorPosition::Offset(position) => position,
                 };
                 let length = match (err.start, err.end) {
-                    (ErrorPosition::Known(start), ErrorPosition::Known(end)) => end - start,
-                    (ErrorPosition::Known(start), ErrorPosition::End) => input_length - start,
-                    (ErrorPosition::End, ErrorPosition::Known(_)) => {
+                    (ErrorPosition::Offset(start), ErrorPosition::Offset(end)) => end - start,
+                    (ErrorPosition::Offset(start), ErrorPosition::End) => input_length - start,
+                    (ErrorPosition::End, ErrorPosition::Offset(_)) => {
                         panic!("error end before error start")
                     }
                     (ErrorPosition::End, ErrorPosition::End) => 1,
