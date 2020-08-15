@@ -9,7 +9,13 @@ pub struct Query;
 impl Query {
     fn calculate(input: String, context: &Context) -> FieldResult<String> {
         context.calculator_view.calculate(&input).map_err(|e| {
-            FieldError::new(e.message, graphql_value!({ "offset": (e.offset as i32) }))
+            FieldError::new(
+                e.message,
+                graphql_value!({
+                    "start": (e.offset as i32),
+                    "end": (if e.offset == -1 {-1} else {e.offset as i32 + 1})
+                }),
+            )
         })
     }
 }

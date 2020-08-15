@@ -86,7 +86,7 @@ export default defineComponent({
           "<span style='color: red; text-decoration: underline; white-space: pre;'>" +
           formula.slice(start, end) +
           "</span>" +
-          formula.slice(end + 1);
+          formula.slice(end);
         return result;
       } else {
         return formula;
@@ -135,11 +135,8 @@ export default defineComponent({
               input: debouncedFormula.value,
               error: {
                 message: gqlError.message,
-                start: gqlError.extensions.offset,
-                end:
-                  gqlError.extensions.offset == -1
-                    ? -1
-                    : gqlError.extensions.offset + 1,
+                start: gqlError.extensions.start,
+                end: gqlError.extensions.end,
               },
             };
           } else if (error.networkError !== undefined) {
