@@ -208,7 +208,7 @@ impl Formula {
                                     "variable '{}' not found",
                                     name
                                 ))
-                                .at(start),
+                                .at_marker(item),
                             )?
                             .clone();
                         stack.push(Number(var));
@@ -495,9 +495,11 @@ mod tests {
         use error::ErrorPosition::*;
         use FormulaError::{EvaluationError, NumericError};
 
-        let error = Formula::new("1 + a").unwrap().eval().unwrap_err();
+        // unknown variable
+        let error = Formula::new("1 + abc").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, EvaluationError(_)));
         assert_eq!(error.start, Known(4));
+        assert_eq!(error.end, Known(7));
 
         let error = Formula::new("1 + \"a\"").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, EvaluationError(_)));

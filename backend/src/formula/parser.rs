@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::Deref;
 
-use super::error::{FormulaError, PositionedFormulaError};
+use super::error::{ErrorMarker, FormulaError, PositionedFormulaError};
 use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, PositionedToken, Token};
 use super::numeric::Numeric;
 
@@ -90,6 +90,15 @@ pub struct PositionedParseItem {
     pub item: ParseItem,
     pub start: usize,
     pub length: usize,
+}
+
+impl ErrorMarker for PositionedParseItem {
+    fn start(&self) -> usize {
+        self.start
+    }
+    fn end(&self) -> usize {
+        self.start + self.length
+    }
 }
 
 impl ParseItem {

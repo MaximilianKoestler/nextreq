@@ -51,6 +51,11 @@ impl fmt::Display for PositionedFormulaError {
     }
 }
 
+pub trait ErrorMarker {
+    fn start(&self) -> usize;
+    fn end(&self) -> usize;
+}
+
 impl FormulaError {
     pub fn at(self, start: isize) -> PositionedFormulaError {
         PositionedFormulaError {
@@ -65,6 +70,14 @@ impl FormulaError {
             } else {
                 ErrorPosition::Known(start as usize + 1)
             },
+        }
+    }
+
+    pub fn at_marker(self, marker: &dyn ErrorMarker) -> PositionedFormulaError {
+        PositionedFormulaError {
+            error: self,
+            start: ErrorPosition::Known(marker.start()),
+            end: ErrorPosition::Known(marker.end()),
         }
     }
 }
