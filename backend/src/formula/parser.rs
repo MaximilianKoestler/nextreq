@@ -598,11 +598,13 @@ pub(crate) mod tests {
 
     #[test]
     fn parse_errors() {
+        use super::super::error::ErrorPosition::*;
+
         // operator followed by nothing
         let error =
             Parser::new(&vec![Token::Operator(LexerOperator::Plus)].at_their_index()).unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, -1);
+        assert_eq!(error.start, End);
 
         // random closing bracket at the end
         let error = Parser::new(
@@ -614,7 +616,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, 1);
+        assert_eq!(error.start, Known(1));
 
         // non-existent function
         let error = Parser::new(
@@ -628,7 +630,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, 1);
+        assert_eq!(error.start, Known(1));
 
         // * is not an unary operator
         let error = Parser::new(
@@ -642,7 +644,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, 2);
+        assert_eq!(error.start, Known(2));
 
         // missing closing bracket
         let error = Parser::new(
@@ -656,7 +658,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, 2);
+        assert_eq!(error.start, Known(2));
 
         // closing bracket is not a valid start of an expression
         let error = Parser::new(
@@ -669,7 +671,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, 2);
+        assert_eq!(error.start, Known(2));
 
         // expression ends unexpectedly
         let error = Parser::new(
@@ -681,7 +683,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, -1);
+        assert_eq!(error.start, End);
 
         // missing operator between values
         let error = Parser::new(
@@ -689,7 +691,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, 1);
+        assert_eq!(error.start, Known(1));
 
         // too many parameters for sqrt
         let error = Parser::new(
@@ -705,7 +707,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, 5);
+        assert_eq!(error.start, Known(5));
 
         // too many parameters for round
         let error = Parser::new(
@@ -723,7 +725,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, 7);
+        assert_eq!(error.start, Known(7));
 
         // too few parameters for round
         let error = Parser::new(
@@ -737,7 +739,7 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, 3);
+        assert_eq!(error.start, Known(3));
     }
 
     #[test]

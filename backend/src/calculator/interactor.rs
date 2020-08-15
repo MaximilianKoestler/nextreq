@@ -1,7 +1,7 @@
 use super::model::CalculatorError;
 use super::view::CalculatorView;
 
-use crate::formula::Formula;
+use crate::formula::{error::ErrorPosition, Formula};
 
 pub struct CalculatorInteractor {}
 
@@ -18,8 +18,14 @@ impl CalculatorView for CalculatorInteractor {
 
         result.map(|v| v.to_string()).map_err(|e| CalculatorError {
             message: e.error.to_string(),
-            start: e.start,
-            end: e.end,
+            start: match e.start {
+                ErrorPosition::Known(position) => position as isize,
+                ErrorPosition::End => -1,
+            },
+            end: match e.end {
+                ErrorPosition::Known(position) => position as isize,
+                ErrorPosition::End => -1,
+            },
         })
     }
 }

@@ -384,35 +384,35 @@ pub(crate) mod tests {
 
     #[test]
     fn tokenize_invalid() {
-        use super::super::error::FormulaError::LexerError;
+        use super::super::error::{ErrorPosition::*, FormulaError::LexerError};
 
         let error = Lexer::new("$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, 0);
+        assert_eq!(error.start, Known(0));
 
         let error = Lexer::new("123$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, 3);
+        assert_eq!(error.start, Known(3));
 
         let error = Lexer::new("\"abc\"$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, 5);
+        assert_eq!(error.start, Known(5));
 
         let error = Lexer::new("abc$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, 3);
+        assert_eq!(error.start, Known(3));
 
         let error = Lexer::new("1.0.0").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, 0);
+        assert_eq!(error.start, Known(0));
 
         let error = Lexer::new("  2 + 1.0.0").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, 6);
+        assert_eq!(error.start, Known(6));
 
         let error = Lexer::new("\"abc").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, 4);
+        assert_eq!(error.start, Known(4));
     }
 
     proptest! {

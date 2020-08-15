@@ -492,42 +492,43 @@ mod tests {
 
     #[test]
     fn evaluation_errors() {
+        use error::ErrorPosition::*;
         use FormulaError::{EvaluationError, NumericError};
 
         let error = Formula::new("1 + a").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, EvaluationError(_)));
-        assert_eq!(error.start, 4);
+        assert_eq!(error.start, Known(4));
 
         let error = Formula::new("1 + \"a\"").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, EvaluationError(_)));
-        assert_eq!(error.start, 2);
+        assert_eq!(error.start, Known(2));
 
         let error = Formula::new("\"a\" * \"a\"").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, EvaluationError(_)));
-        assert_eq!(error.start, 4);
+        assert_eq!(error.start, Known(4));
 
         let error = Formula::new("0 / (1 - 1)").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.start, 2);
+        assert_eq!(error.start, Known(2));
 
         let error = Formula::new("10 ^ 10000").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.start, 3);
+        assert_eq!(error.start, Known(3));
 
         let error = Formula::new("(-1)!").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.start, 4);
+        assert_eq!(error.start, Known(4));
 
         let error = Formula::new("1 + sqrt(-1)").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.start, 4);
+        assert_eq!(error.start, Known(4));
 
         let error = Formula::new("1 + round(3.0, -1)")
             .unwrap()
             .eval()
             .unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.start, 4);
+        assert_eq!(error.start, Known(4));
     }
 
     proptest! {

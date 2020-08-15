@@ -19,11 +19,26 @@ impl fmt::Display for FormulaError {
     }
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum ErrorPosition {
+    Known(usize),
+    End,
+}
+
+impl fmt::Display for ErrorPosition {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Known(position) => write!(f, "{}", position),
+            Self::End => write!(f, "END"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct PositionedFormulaError {
     pub error: FormulaError,
-    pub start: isize,
-    pub end: isize,
+    pub start: ErrorPosition,
+    pub end: ErrorPosition,
 }
 
 impl fmt::Display for PositionedFormulaError {
@@ -40,8 +55,16 @@ impl FormulaError {
     pub fn at(self, start: isize) -> PositionedFormulaError {
         PositionedFormulaError {
             error: self,
-            start,
-            end: if start == -1 { -1 } else { start + 1 },
+            start: if start == -1 {
+                ErrorPosition::End
+            } else {
+                ErrorPosition::Known(start as usize)
+            },
+            end: if start == -1 {
+                ErrorPosition::End
+            } else {
+                ErrorPosition::Known(start as usize + 1)
+            },
         }
     }
 }

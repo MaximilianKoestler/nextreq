@@ -1,5 +1,6 @@
 use std::io::{self, Write};
 
+use nextreq::formula::error::ErrorPosition;
 use nextreq::formula::{Formula, VariableDict};
 
 fn prompt(text: &str) -> Option<String> {
@@ -44,10 +45,10 @@ fn main() {
             }
             Err(err) => {
                 let offset = match err.start {
-                    -1 => (input.chars().count() - 1) as isize,
-                    _ => err.start - 1,
+                    ErrorPosition::End => (input.chars().count() - 1),
+                    ErrorPosition::Known(position) => position,
                 };
-                let indentation = (0..=(offset + 6)).map(|_| ' ').collect::<String>();
+                let indentation = (0..=(offset + 5)).map(|_| ' ').collect::<String>();
                 println!("{}^", indentation);
                 println!("{}", err.error);
             }
