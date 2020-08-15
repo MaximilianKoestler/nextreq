@@ -44,12 +44,23 @@ fn main() {
                 };
             }
             Err(err) => {
-                let offset = match err.start {
-                    ErrorPosition::End => (input.chars().count() - 1),
+                let input_length = input.chars().count();
+
+                let start = match err.start {
+                    ErrorPosition::End => input_length - 1,
                     ErrorPosition::Known(position) => position,
                 };
-                let indentation = (0..=(offset + 5)).map(|_| ' ').collect::<String>();
-                println!("{}^", indentation);
+                let length = match (err.start, err.end) {
+                    (ErrorPosition::Known(start), ErrorPosition::Known(end)) => end - start,
+                    (ErrorPosition::Known(start), ErrorPosition::End) => input_length - start,
+                    (ErrorPosition::End, ErrorPosition::Known(_)) => {
+                        panic!("error end before error start")
+                    }
+                    (ErrorPosition::End, ErrorPosition::End) => 1,
+                };
+                let indentation = (0..=(start + 5)).map(|_| ' ').collect::<String>();
+                let marker = (0..length).map(|_| '^').collect::<String>();
+                println!("{}{}", indentation, marker);
                 println!("{}", err.error);
             }
         }
