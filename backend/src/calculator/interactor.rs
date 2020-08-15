@@ -18,8 +18,8 @@ impl CalculatorView for CalculatorInteractor {
 
         result.map(|v| v.to_string()).map_err(|e| CalculatorError {
             message: e.error.to_string(),
-            start: e.offset,
-            end: if e.offset == -1 { -1 } else { e.offset + 1 },
+            start: e.start,
+            end: e.end,
         })
     }
 }

@@ -22,20 +22,26 @@ impl fmt::Display for FormulaError {
 #[derive(Debug, Clone)]
 pub struct PositionedFormulaError {
     pub error: FormulaError,
-    pub offset: isize,
+    pub start: isize,
+    pub end: isize,
 }
 
 impl fmt::Display for PositionedFormulaError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{} (originating at offset {})", self.error, self.offset)
+        write!(
+            f,
+            "{} (originating at {}..{})",
+            self.error, self.start, self.end
+        )
     }
 }
 
 impl FormulaError {
-    pub fn at(self, offset: isize) -> PositionedFormulaError {
+    pub fn at(self, start: isize) -> PositionedFormulaError {
         PositionedFormulaError {
             error: self,
-            offset,
+            start,
+            end: if start == -1 { -1 } else { start + 1 },
         }
     }
 }

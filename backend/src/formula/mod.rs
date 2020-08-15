@@ -496,38 +496,38 @@ mod tests {
 
         let error = Formula::new("1 + a").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, EvaluationError(_)));
-        assert_eq!(error.offset, 4);
+        assert_eq!(error.start, 4);
 
         let error = Formula::new("1 + \"a\"").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, EvaluationError(_)));
-        assert_eq!(error.offset, 2);
+        assert_eq!(error.start, 2);
 
         let error = Formula::new("\"a\" * \"a\"").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, EvaluationError(_)));
-        assert_eq!(error.offset, 4);
+        assert_eq!(error.start, 4);
 
         let error = Formula::new("0 / (1 - 1)").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.offset, 2);
+        assert_eq!(error.start, 2);
 
         let error = Formula::new("10 ^ 10000").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.offset, 3);
+        assert_eq!(error.start, 3);
 
         let error = Formula::new("(-1)!").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.offset, 4);
+        assert_eq!(error.start, 4);
 
         let error = Formula::new("1 + sqrt(-1)").unwrap().eval().unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.offset, 4);
+        assert_eq!(error.start, 4);
 
         let error = Formula::new("1 + round(3.0, -1)")
             .unwrap()
             .eval()
             .unwrap_err();
         assert!(matches!(error.error, NumericError(_)));
-        assert_eq!(error.offset, 4);
+        assert_eq!(error.start, 4);
     }
 
     proptest! {

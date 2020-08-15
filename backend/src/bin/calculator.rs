@@ -43,9 +43,9 @@ fn main() {
                 };
             }
             Err(err) => {
-                let offset = match err.offset {
+                let offset = match err.start {
                     -1 => (input.chars().count() - 1) as isize,
-                    _ => err.offset - 1,
+                    _ => err.start - 1,
                 };
                 let indentation = (0..=(offset + 6)).map(|_| ' ').collect::<String>();
                 println!("{}^", indentation);
