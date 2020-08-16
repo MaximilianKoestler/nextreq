@@ -57,18 +57,6 @@ pub trait ErrorMarker {
 }
 
 impl FormulaError {
-    pub fn at(self, start: isize) -> PositionedFormulaError {
-        PositionedFormulaError {
-            error: self,
-            start: if start == -1 {
-                ErrorPosition::End
-            } else {
-                ErrorPosition::Offset(start as usize)
-            },
-            end: ErrorPosition::Offset(0),
-        }
-    }
-
     pub fn between(self, start: usize, end: usize) -> PositionedFormulaError {
         PositionedFormulaError {
             error: self,
