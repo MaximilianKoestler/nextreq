@@ -272,7 +272,7 @@ impl Parser {
                     Token::Bracket(LexerBracket::RoundClose) => match info.expectation {
                         TermExpectation::Exact(expected, 0) if terms != expected => {
                             return Err(ParserError(format!(
-                                "expected {} terms, found {}",
+                                "expected {} parameter(s), found {}",
                                 expected, terms
                             ))
                             .between(info.start, token.start + token.length));
