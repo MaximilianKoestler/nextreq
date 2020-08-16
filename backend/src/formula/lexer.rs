@@ -186,7 +186,7 @@ impl Lexer {
                 _ => {
                     return Err(
                         FormulaError::LexerError(format!("unexpected symbol: {}", c))
-                            .at(offset as isize),
+                            .between(offset, offset + 1),
                     )
                 }
             };
@@ -206,7 +206,8 @@ impl Lexer {
             .parse()
             .map(|n| (n, numeric.chars().count()))
             .map_err(|err: ParseError| {
-                FormulaError::LexerError(err.to_string()).at(offset as isize)
+                FormulaError::LexerError(err.to_string())
+                    .between(offset, offset + numeric.chars().count())
             })
     }
 
@@ -229,7 +230,7 @@ impl Lexer {
         } else {
             Err(
                 FormulaError::LexerError("literal not terminated by \"".to_owned())
-                    .at((offset + literal.chars().count() + 1) as isize),
+                    .between(offset, offset + literal.chars().count() + 1),
             )
         }
     }
@@ -389,22 +390,27 @@ pub(crate) mod tests {
         let error = Lexer::new("$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
         assert_eq!(error.start, Offset(0));
+        assert_eq!(error.end, Offset(1));
 
         let error = Lexer::new("123$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
         assert_eq!(error.start, Offset(3));
+        assert_eq!(error.end, Offset(4));
 
         let error = Lexer::new("\"abc\"$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
         assert_eq!(error.start, Offset(5));
+        assert_eq!(error.end, Offset(6));
 
         let error = Lexer::new("abc$").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
         assert_eq!(error.start, Offset(3));
+        assert_eq!(error.end, Offset(4));
 
         let error = Lexer::new("1.0.0").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
         assert_eq!(error.start, Offset(0));
+        assert_eq!(error.end, Offset(5));
 
         let error = Lexer::new("  2 + 1.0.0").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
@@ -412,7 +418,8 @@ pub(crate) mod tests {
 
         let error = Lexer::new("\"abc").unwrap_err();
         assert!(matches!(error.error, LexerError(_)));
-        assert_eq!(error.start, Offset(4));
+        assert_eq!(error.start, Offset(0));
+        assert_eq!(error.end, Offset(4));
     }
 
     proptest! {

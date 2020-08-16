@@ -65,11 +65,31 @@ impl FormulaError {
             } else {
                 ErrorPosition::Offset(start as usize)
             },
-            end: if start == -1 {
-                ErrorPosition::End
-            } else {
-                ErrorPosition::Offset(start as usize + 1)
-            },
+            end: ErrorPosition::Offset(0),
+        }
+    }
+
+    pub fn between(self, start: usize, end: usize) -> PositionedFormulaError {
+        PositionedFormulaError {
+            error: self,
+            start: ErrorPosition::Offset(start),
+            end: ErrorPosition::Offset(end),
+        }
+    }
+
+    pub fn to_end(self, start: usize) -> PositionedFormulaError {
+        PositionedFormulaError {
+            error: self,
+            start: ErrorPosition::Offset(start),
+            end: ErrorPosition::End,
+        }
+    }
+
+    pub fn at_end(self) -> PositionedFormulaError {
+        PositionedFormulaError {
+            error: self,
+            start: ErrorPosition::End,
+            end: ErrorPosition::End,
         }
     }
 
