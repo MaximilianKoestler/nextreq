@@ -2,7 +2,7 @@ use std::fmt;
 use std::ops::Deref;
 use std::str;
 
-use super::error::{FormulaError, PositionedFormulaError};
+use super::error::{ErrorMarker, FormulaError, PositionedFormulaError};
 use super::numeric::{Numeric, ParseError};
 use super::quoted_string::Quotable;
 
@@ -74,6 +74,15 @@ pub struct PositionedToken {
     pub token: Token,
     pub start: usize,
     pub length: usize,
+}
+
+impl ErrorMarker for PositionedToken {
+    fn start(&self) -> usize {
+        self.start
+    }
+    fn end(&self) -> usize {
+        self.start + self.length
+    }
 }
 
 impl Token {

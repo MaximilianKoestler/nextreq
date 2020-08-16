@@ -1,7 +1,11 @@
 use std::fmt;
 use std::ops::Deref;
 
-use super::error::{ErrorMarker, FormulaError, PositionedFormulaError};
+use super::error::{
+    ErrorMarker,
+    FormulaError::{self, ParserError},
+    PositionedFormulaError,
+};
 use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, PositionedToken, Token};
 use super::numeric::Numeric;
 
@@ -130,12 +134,6 @@ pub struct Parser {
     parsed_expression: Vec<PositionedParseItem>,
 }
 
-macro_rules! error {
-    ($offset:expr, $($arg:tt)*) => {{
-        return Err(FormulaError::ParserError(format!($($arg)*)).at($offset as isize))
-    }}
-}
-
 type PeekableToken<'a> = std::iter::Peekable<std::slice::Iter<'a, PositionedToken>>;
 
 enum TermExpectation {
@@ -143,11 +141,37 @@ enum TermExpectation {
     Exact(u32, u32),
 }
 
-impl TermExpectation {
+struct TermInformation {
+    start: usize,
+    expectation: TermExpectation,
+}
+
+impl TermInformation {
+    fn unlimited_at(start: usize) -> Self {
+        Self {
+            start,
+            expectation: TermExpectation::Unlimited,
+        }
+    }
+
+    fn limited_at(start: usize, limit: u32) -> Self {
+        Self {
+            start,
+            expectation: TermExpectation::Exact(limit, 1),
+        }
+    }
+
     fn countdown(&self) -> Self {
-        match self {
-            Self::Unlimited | Self::Exact(_, 0) => Self::Unlimited,
-            Self::Exact(expected, countdown) => Self::Exact(*expected, countdown - 1),
+        Self {
+            start: self.start,
+            expectation: match self.expectation {
+                TermExpectation::Unlimited | TermExpectation::Exact(_, 0) => {
+                    TermExpectation::Unlimited
+                }
+                TermExpectation::Exact(expected, countdown) => {
+                    TermExpectation::Exact(expected, countdown - 1)
+                }
+            },
         }
     }
 }
@@ -155,10 +179,12 @@ impl TermExpectation {
 impl Parser {
     pub fn new(tokens: &[PositionedToken]) -> Result<Self, PositionedFormulaError> {
         let mut it = tokens.iter().peekable();
-        let parsed_expression = Self::expression(&mut it, 0, TermExpectation::Unlimited)?;
+        let parsed_expression = Self::expression(&mut it, 0, TermInformation::unlimited_at(0))?;
 
         if let Some(token) = it.next() {
-            error!(token.start, "unparsed tokens at end of expression");
+            return Err(
+                ParserError(format!("unparsed tokens at end of expression")).at_marker(token)
+            );
         }
 
         Ok(Self { parsed_expression })
@@ -167,7 +193,7 @@ impl Parser {
     fn expression(
         it: &mut PeekableToken,
         min_bp: u8,
-        limit: TermExpectation,
+        info: TermInformation,
     ) -> Result<Vec<PositionedParseItem>, PositionedFormulaError> {
         let mut result = vec![];
 
@@ -184,10 +210,14 @@ impl Parser {
                         it.peek().map(|t| &t.token)
                     {
                         let (function, params) =
-                            Self::function_item(name).map_err(|e| e.at(token.start as isize))?;
+                            Self::function_item(name).map_err(|e| e.at_marker(token))?;
                         let bp = Self::function_binding_power();
 
-                        result.extend(Self::expression(it, bp, TermExpectation::Exact(params, 1))?);
+                        result.extend(Self::expression(
+                            it,
+                            bp,
+                            TermInformation::limited_at(token.start, params),
+                        )?);
                         result.push(ParseItem::Function(function, params).at_token(token));
                     } else {
                         result
@@ -198,36 +228,54 @@ impl Parser {
                     let op = match op {
                         LexerOperator::Plus => Operator::Pos,
                         LexerOperator::Minus => Operator::Neg,
-                        _ => error!(token.start, "unsupported unary operator: {}", op),
+                        _ => {
+                            return Err(ParserError(format!("unsupported unary operator: {}", op))
+                                .at_marker(token))
+                        }
                     };
                     let bp = Self::prefix_binding_power(&op);
 
-                    result.extend(Self::expression(it, bp, TermExpectation::Unlimited)?);
+                    result.extend(Self::expression(
+                        it,
+                        bp,
+                        TermInformation::unlimited_at(token.start),
+                    )?);
                     result.push(ParseItem::Operator(op).at_token(token));
                 }
                 Token::Bracket(LexerBracket::RoundOpen) => {
-                    result.extend(Self::expression(it, 0, limit.countdown())?);
+                    result.extend(Self::expression(it, 0, info.countdown())?);
                     match it.next().map(|t| &t.token) {
                         Some(Token::Bracket(LexerBracket::RoundClose)) => (),
                         Some(x) => panic!("expected closing bracket, found: {}", x),
-                        None => error!(
-                            token.start,
-                            "expected closing bracket, found end of expression"
-                        ),
+                        None => {
+                            return Err(ParserError(format!(
+                                "expected closing bracket, found end of expression"
+                            ))
+                            .to_end(token.start))
+                        }
                     }
                 }
-                _ => error!(token.start, "unsupported start token: {}", token.token),
+                _ => {
+                    return Err(
+                        ParserError(format!("unsupported start token: {}", token.token))
+                            .at_marker(token),
+                    )
+                }
             },
-            None => error!(-1, "unexpected end of expression"),
+            None => return Err(ParserError(format!("unexpected end of expression")).at_end()),
         };
 
         let mut terms = 1;
         loop {
             match it.peek() {
-                Some(token) => match &token.token {
-                    Token::Bracket(LexerBracket::RoundClose) => match limit {
+                Some(&token) => match &token.token {
+                    Token::Bracket(LexerBracket::RoundClose) => match info.expectation {
                         TermExpectation::Exact(expected, 0) if terms != expected => {
-                            error!(token.start, "expected {} terms, found {}", expected, terms)
+                            return Err(ParserError(format!(
+                                "expected {} terms, found {}",
+                                expected, terms
+                            ))
+                            .between(info.start, token.start + token.length));
                         }
                         _ => break,
                     },
@@ -239,7 +287,11 @@ impl Parser {
                         }
 
                         it.next();
-                        result.extend(Self::expression(it, r_bp, TermExpectation::Unlimited)?);
+                        result.extend(Self::expression(
+                            it,
+                            r_bp,
+                            TermInformation::unlimited_at(token.start),
+                        )?);
                     }
                     Token::Operator(op) => {
                         let op = match op {
@@ -265,14 +317,21 @@ impl Parser {
                             }
 
                             it.next();
-                            result.extend(Self::expression(it, r_bp, TermExpectation::Unlimited)?);
+                            result.extend(Self::expression(
+                                it,
+                                r_bp,
+                                TermInformation::unlimited_at(token.start),
+                            )?);
                         }
                         result.push(ParseItem::Operator(op).at(start, length));
                     }
-                    _ => error!(
-                        token.start,
-                        "unsupported continuation token: {}", token.token
-                    ),
+                    _ => {
+                        return Err(ParserError(format!(
+                            "unsupported continuation token: {}",
+                            token.token
+                        ))
+                        .at_marker(token))
+                    }
                 },
                 None => break,
             };
@@ -614,6 +673,7 @@ pub(crate) mod tests {
             Parser::new(&vec![Token::Operator(LexerOperator::Plus)].at_their_index()).unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.start, End);
+        assert_eq!(error.end, End);
 
         // random closing bracket at the end
         let error = Parser::new(
@@ -626,6 +686,7 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.start, Offset(1));
+        assert_eq!(error.end, Offset(2));
 
         // non-existent function
         let error = Parser::new(
@@ -640,6 +701,7 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.start, Offset(1));
+        assert_eq!(error.end, Offset(2));
 
         // * is not an unary operator
         let error = Parser::new(
@@ -654,6 +716,7 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.start, Offset(2));
+        assert_eq!(error.end, Offset(3));
 
         // missing closing bracket
         let error = Parser::new(
@@ -668,6 +731,7 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.start, Offset(2));
+        assert_eq!(error.end, End);
 
         // closing bracket is not a valid start of an expression
         let error = Parser::new(
@@ -681,6 +745,7 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.start, Offset(2));
+        assert_eq!(error.end, Offset(3));
 
         // expression ends unexpectedly
         let error = Parser::new(
@@ -693,6 +758,7 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.start, End);
+        assert_eq!(error.end, End);
 
         // missing operator between values
         let error = Parser::new(
@@ -701,10 +767,12 @@ pub(crate) mod tests {
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.start, Offset(1));
+        assert_eq!(error.end, Offset(2));
 
         // too many parameters for sqrt
         let error = Parser::new(
             &vec![
+                Token::Operator(LexerOperator::Plus),
                 Token::Identifier("sqrt".to_owned()),
                 Token::Bracket(LexerBracket::RoundOpen),
                 Token::Number(1.0.into()),
@@ -715,8 +783,10 @@ pub(crate) mod tests {
             .at_their_index(),
         )
         .unwrap_err();
+
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Offset(5));
+        assert_eq!(error.start, Offset(1));
+        assert_eq!(error.end, Offset(7));
 
         // too many parameters for round
         let error = Parser::new(
@@ -734,7 +804,8 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Offset(7));
+        assert_eq!(error.start, Offset(0));
+        assert_eq!(error.end, Offset(8));
 
         // too few parameters for round
         let error = Parser::new(
@@ -748,7 +819,8 @@ pub(crate) mod tests {
         )
         .unwrap_err();
         assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Offset(3));
+        assert_eq!(error.start, Offset(0));
+        assert_eq!(error.end, Offset(4));
     }
 
     #[test]
