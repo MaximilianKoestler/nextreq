@@ -172,8 +172,19 @@ impl Parser {
                         let bp = Self::function_binding_power();
 
                         let mut info = TermInformation::new(token.start);
-                        info.new_term();
-                        result.extend(Self::expression(it, bp, &mut info)?);
+
+                        // handle special case of function without any parameter
+                        let mut lookahead = it.clone();
+                        lookahead.next();
+                        if let Some(Token::Bracket(LexerBracket::RoundClose)) =
+                            lookahead.next().map(|t| &t.token)
+                        {
+                            it.next();
+                            it.next();
+                        } else {
+                            info.new_term();
+                            result.extend(Self::expression(it, bp, &mut info)?);
+                        }
                         result.push(
                             ParseItem::Function(name.to_ascii_lowercase(), info.terms())
                                 .at_token(token),
@@ -889,6 +900,21 @@ pub(crate) mod tests {
         )
         .unwrap();
         assert_eq!(parser.postfix(), format!("1 2 + 3 *"));
+    }
+
+    #[test]
+    fn parse_function_without_parameters() {
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("now".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap();
+        let expected = vec![ParseItem::Function("now".to_owned(), 0).at(0, 1)];
+        assert_eq!(&parser[..], &expected[..]);
     }
 
     #[test]
