@@ -83,7 +83,7 @@ describe("getOffsetNode()", () => {
     let text = document.createTextNode("abc");
     parent.appendChild(text);
 
-    expect(getOffsetNode(parent, 3)).toStrictEqual({ node: parent, offset: 1 });
-    expect(getOffsetNode(parent, 5)).toStrictEqual({ node: parent, offset: 1 });
+    expect(getOffsetNode(parent, 3)).toStrictEqual({ node: text, offset: 3 });
+    expect(getOffsetNode(parent, 5)).toStrictEqual({ node: text, offset: 3 });
   });
 });

@@ -35,24 +35,24 @@ export const getOffsetNode = (
   }
 
   if (parent.nodeType === Node.TEXT_NODE) {
-    return { node: parent, offset: offset };
+    return {
+      node: parent,
+      offset: Math.min(offset, (parent.textContent || "").length),
+    };
   }
 
   let remainingOffset = offset;
   const children = parent.childNodes;
-  for (let i = 0; i < children.length; ++i) {
+  for (let i = 0; i < children.length - 1; ++i) {
     const child = children[i];
     const childTextLength = (child.textContent || "").length;
-    if (childTextLength === remainingOffset) {
-      return { node: parent, offset: i + 1 };
-    }
     if (childTextLength < remainingOffset) {
       remainingOffset -= childTextLength;
     } else {
       return getOffsetNode(child, remainingOffset);
     }
   }
-  return { node: parent, offset: children.length };
+  return getOffsetNode(children[children.length - 1], remainingOffset);
 };
 
 export const getSelectionPosition = (parent: Node) => {
@@ -110,6 +110,8 @@ export const setSelectedPosition = (
   ) {
     return;
   }
+
+  console.log(anchorNode, anchorOffset, focusNode, focusOffset);
 
   document
     .getSelection()
