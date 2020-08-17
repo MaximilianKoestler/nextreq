@@ -1,16 +1,10 @@
 <template>
   <div
+    ref="editorInput"
     class="editor"
     contenteditable="true"
     spellcheck="false"
     @input="onInputChange($event)"
-  ></div>
-
-  <div
-    class="editor disabled"
-    contenteditable="false"
-    spellcheck="false"
-    v-html="styledFormula"
   ></div>
 
   <div>
@@ -56,21 +50,36 @@ interface Result {
   error?: Error;
 }
 
+const addErrorStyle = (text: string, start: number, end: number) => {
+  const styledText =
+    text.slice(0, start) +
+    "<span class='inline-error'>" +
+    text.slice(start, end) +
+    "</span>" +
+    text.slice(end);
+  return styledText;
+};
+
+const pureInput = (html: string) => {
+  const div = document.createElement("div");
+  div.innerHTML = html;
+  return div.textContent || div.innerText || "";
+};
+
 export default defineComponent({
   name: "Calculator",
   setup: () => {
     const input = ref("");
     const debouncedPureInput = ref("");
-
-    const pureInput = computed(() => {
-      const div = document.createElement("div");
-      div.innerHTML = input.value;
-      return div.textContent || div.innerText || "";
+    const editorInput = ref(null);
+    const computedResult: Ref<Result> = ref({
+      input: input.value,
+      value: "",
     });
 
     let timeout: NodeJS.Timeout | null = null;
     const onInputChange = (e: any) => {
-      input.value = e.target.innerHTML;
+      input.value = pureInput(e.target.innerHTML);
 
       if (timeout !== null) {
         clearTimeout(timeout);
@@ -80,34 +89,32 @@ export default defineComponent({
       }, 800);
     };
 
-    const computedResult: Ref<Result> = ref({
-      input: input.value,
-      value: "",
-    });
+    // apply style to input in case of error
+    watch(computedResult, (newResult) => {
+      const editorDiv: any = editorInput.value;
+      if (editorDiv === null) {
+        return;
+      }
 
-    const styledFormula = computed(() => {
-      let formula = computedResult.value.input;
-      if (computedResult.value.error !== undefined) {
-        let start = computedResult.value.error.start;
+      const currentInput = input.value;
+      if (newResult.error !== undefined) {
+        const error = newResult.error;
+        const oldInput = newResult.input;
+
+        let start = error.start;
         if (start == -1) {
-          start = formula.length;
-          formula = formula + " ";
+          start = oldInput.length - 1;
         }
 
-        let end = computedResult.value.error.end;
+        let end = error.end;
         if (end == -1) {
-          end = formula.length;
+          end = oldInput.length;
         }
 
-        const result =
-          formula.slice(0, start) +
-          "<span class='inline-error'>" +
-          formula.slice(start, end) +
-          "</span>" +
-          formula.slice(end);
-        return result;
+        const styledInput = addErrorStyle(currentInput, start, end);
+        editorDiv.innerHTML = styledInput;
       } else {
-        return formula;
+        editorDiv.innerHTML = currentInput;
       }
     });
 
@@ -154,7 +161,7 @@ export default defineComponent({
     return {
       onInputChange,
       computedResult,
-      styledFormula,
+      editorInput,
     };
   },
 });
@@ -180,7 +187,7 @@ export default defineComponent({
 
 <style lang="scss">
 .inline-error {
-  text-decoration: underline wavy red;
+  text-decoration: underline red;
   white-space: pre;
   text-decoration-skip-ink: none;
 }
