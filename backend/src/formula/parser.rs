@@ -540,13 +540,17 @@ pub(crate) mod tests {
         prop_oneof![Just(LexerOperator::ExclamationMark),].boxed()
     }
 
-    fn function() -> BoxedStrategy<(String, usize)> {
-        prop_oneof![
-            Just(("sqrt".to_owned(), 1)),
-            Just(("abs".to_owned(), 1)),
-            Just(("round".to_owned(), 2)),
-        ]
-        .boxed()
+    fn function_name() -> BoxedStrategy<String> {
+        r"[[:lower:]]{3}".boxed()
+    }
+
+    prop_compose! {
+        fn function()
+                   (name in function_name(),
+                        parameters in (1..10usize))
+                   -> (String, usize) {
+            (name.to_owned(), parameters)
+        }
     }
 
     prop_compose! {
