@@ -182,15 +182,6 @@ impl Formula {
 
         let mut stack: Vec<Value> = vec![];
         for item in self.parser.iter() {
-            if start_time.elapsed() > timeout {
-                error_at!(
-                    item,
-                    "timeout exceeded ({:?} out of {:?})",
-                    start_time.elapsed(),
-                    timeout
-                );
-            }
-
             match &item.item {
                 parser::ParseItem::Value(v) => match v {
                     parser::Value::Number(value) => stack.push(Number(value.clone())),
@@ -275,6 +266,15 @@ impl Formula {
                         ));
                     }
                 },
+            }
+
+            if start_time.elapsed() > timeout {
+                error_at!(
+                    item,
+                    "timeout exceeded ({:?} out of {:?})",
+                    start_time.elapsed(),
+                    timeout
+                );
             }
         }
 
