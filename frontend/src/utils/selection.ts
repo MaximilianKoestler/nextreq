@@ -1,4 +1,8 @@
-const getNodeOffset = (parent: Node, node: Node): number => {
+export const getNodeOffset = (parent: Node, node: Node): number => {
+  if (parent === node) {
+    return 0;
+  }
+
   let offset = 0;
   const children = parent.childNodes;
   for (let i = 0; i < children.length; ++i) {
@@ -21,7 +25,7 @@ const getNodeOffset = (parent: Node, node: Node): number => {
   return 0;
 };
 
-const getOffsetNode = (parent: Node, offset: number) => {
+export const getOffsetNode = (parent: Node, offset: number) => {
   return { node: parent.firstChild, offset };
 };
 
