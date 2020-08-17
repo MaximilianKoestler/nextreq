@@ -6,6 +6,7 @@
     "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
     "test:unit": "vue-cli-service test:unit",
+    "test:debug": "node ./node_modules/@vue/cli-service/bin/vue-cli-service.js test:unit --no-cache --runInBand",
     "lint": "vue-cli-service lint"
   },
   "dependencies": {

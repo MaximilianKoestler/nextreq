@@ -13,10 +13,11 @@ export const getNodeOffset = (parent: Node, node: Node): number => {
       child.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_CONTAINED_BY
     ) {
       return offset + getNodeOffset(child, node);
-    } else if (child.nodeType === Node.TEXT_NODE) {
-      offset += (child.nodeValue || "").length;
-    } else if (child.nodeType === Node.ELEMENT_NODE) {
-      offset += (child as HTMLDivElement).innerText.length;
+    } else if (
+      child.nodeType === Node.TEXT_NODE ||
+      child.nodeType === Node.ELEMENT_NODE
+    ) {
+      offset += (child.textContent || "").length;
     } else {
       console.error("Unexpected child node: ", child);
     }
