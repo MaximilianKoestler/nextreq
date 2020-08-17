@@ -19,7 +19,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, computed, ref, Ref, watch } from "vue";
+import { defineComponent, ref, Ref, watch } from "vue";
 
 import gql from "graphql-tag";
 import { ApolloClient } from "apollo-client";
@@ -88,8 +88,8 @@ export default defineComponent({
     });
 
     let timeout: NodeJS.Timeout | null = null;
-    const onInputChange = (e: any) => {
-      input.value = pureInput(e.target.innerHTML);
+    const onInputChange = (e: Event) => {
+      input.value = pureInput((e.target as HTMLDivElement).innerHTML);
 
       if (timeout !== null) {
         clearTimeout(timeout);
@@ -105,7 +105,7 @@ export default defineComponent({
         return;
       }
 
-      const editorDiv: any = editorInput.value;
+      const editorDiv: HTMLDivElement | null = editorInput.value;
       if (editorDiv === null) {
         return;
       }
