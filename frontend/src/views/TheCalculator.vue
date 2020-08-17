@@ -1,6 +1,11 @@
 <template>
   <div>
-    <Calculator />
+    <div class="container">
+      <h1>Start typing a calculation</h1>
+      <div class="row">
+        <div class="col-12"><Calculator /></div>
+      </div>
+    </div>
   </div>
 </template>
 

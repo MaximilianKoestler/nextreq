@@ -7,7 +7,7 @@
     @input="onInputChange($event)"
   ></div>
 
-  <div>
+  <div class="result">
     <span v-if="computedResult.value !== undefined">{{
       computedResult.value
     }}</span>
@@ -19,7 +19,7 @@
 </template>
 
 <script lang="ts">
-import { defineComponent, ref, Ref, watch } from "vue";
+import { defineComponent, ref, Ref, watch, onMounted } from "vue";
 
 import gql from "graphql-tag";
 import { ApolloClient } from "apollo-client";
@@ -85,6 +85,13 @@ export default defineComponent({
     const computedResult: Ref<Result> = ref({
       input: input.value,
       value: "",
+    });
+
+    onMounted(() => {
+      const editorDiv: HTMLDivElement | null = editorInput.value;
+      if (editorDiv !== null) {
+        (editorDiv as HTMLDivElement).focus();
+      }
     });
 
     let timeout: NodeJS.Timeout | null = null;
@@ -187,15 +194,24 @@ export default defineComponent({
 }
 
 .editor {
+  border: 1px solid black;
+  border-radius: 4px;
   font: inherit;
-  border: 1px solid grey;
+  padding: 0.5rem;
+  width: 100%;
   height: 100px;
-  width: 300px;
-  padding: 10px;
 }
 
-.disabled {
-  background-color: #e2e2e2;
+.result {
+  border: 1px solid #888888;
+  border-radius: 4px;
+
+  background-color: #eeeeee;
+
+  margin-top: 1rem;
+  padding: 0.5rem;
+  width: 100%;
+  height: 75px;
 }
 </style>
 
