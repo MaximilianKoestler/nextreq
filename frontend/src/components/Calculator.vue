@@ -22,10 +22,11 @@
 import { defineComponent, computed, ref, Ref, watch } from "vue";
 
 import gql from "graphql-tag";
-
 import { ApolloClient } from "apollo-client";
 import { createHttpLink } from "apollo-link-http";
 import { InMemoryCache } from "apollo-cache-inmemory";
+
+import { getSelectionPosition, setSelectedPosition } from "@/utils/selection";
 
 const httpLink = createHttpLink({
   uri: "http://localhost:8100/graphql",
@@ -66,6 +67,15 @@ const pureInput = (html: string) => {
   return div.textContent || div.innerText || "";
 };
 
+const updateDiv = (div: HTMLDivElement, html: string) => {
+  const selection = getSelectionPosition(div);
+  div.innerHTML = html;
+  if (selection !== null) {
+    const { start, end } = selection;
+    setSelectedPosition(div, start, end);
+  }
+};
+
 export default defineComponent({
   name: "Calculator",
   setup: () => {
@@ -90,7 +100,11 @@ export default defineComponent({
     };
 
     // apply style to input in case of error
-    watch(computedResult, (newResult) => {
+    watch(computedResult, (newResult, oldResult) => {
+      if (newResult.error === oldResult.error) {
+        return;
+      }
+
       const editorDiv: any = editorInput.value;
       if (editorDiv === null) {
         return;
@@ -112,9 +126,9 @@ export default defineComponent({
         }
 
         const styledInput = addErrorStyle(currentInput, start, end);
-        editorDiv.innerHTML = styledInput;
+        updateDiv(editorDiv, styledInput);
       } else {
-        editorDiv.innerHTML = currentInput;
+        updateDiv(editorDiv, currentInput);
       }
     });
 
