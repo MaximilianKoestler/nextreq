@@ -26,8 +26,33 @@ export const getNodeOffset = (parent: Node, node: Node): number => {
   return 0;
 };
 
-export const getOffsetNode = (parent: Node, offset: number) => {
-  return { node: parent.firstChild, offset };
+export const getOffsetNode = (
+  parent: Node,
+  offset: number
+): { node: Node; offset: number } => {
+  if (offset === 0) {
+    return { node: parent, offset: 0 };
+  }
+
+  if (parent.nodeType === Node.TEXT_NODE) {
+    return { node: parent, offset: offset };
+  }
+
+  let remainingOffset = offset;
+  const children = parent.childNodes;
+  for (let i = 0; i < children.length; ++i) {
+    const child = children[i];
+    const childTextLength = (child.textContent || "").length;
+    if (childTextLength === remainingOffset) {
+      return { node: parent, offset: i + 1 };
+    }
+    if (childTextLength < remainingOffset) {
+      remainingOffset -= childTextLength;
+    } else {
+      return getOffsetNode(child, remainingOffset);
+    }
+  }
+  return { node: parent, offset: children.length };
 };
 
 export const getSelectionPosition = (parent: Node) => {
