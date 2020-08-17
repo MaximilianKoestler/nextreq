@@ -245,18 +245,18 @@ impl Formula {
                         stack.push(Number(lhs.factorial().map_err(|e| e.at_marker(item))?));
                     }
                 },
-                parser::ParseItem::Function(f, _) => match f {
-                    parser::Function::Sqrt => {
+                parser::ParseItem::Function(name, count) => match (&name[..], count) {
+                    ("sqrt", 1) => {
                         let param = take!(stack);
                         let param = enforce_number!(item, "sqrt function", param);
                         stack.push(Number(param.sqrt().map_err(|e| e.at_marker(item))?));
                     }
-                    parser::Function::Abs => {
+                    ("abs", 1) => {
                         let param = take!(stack);
                         let param = enforce_number!(item, "abs function", param);
                         stack.push(Number(param.abs()));
                     }
-                    parser::Function::Round => {
+                    ("round", 2) => {
                         let precision = take!(stack);
                         let value = take!(stack);
                         let (precision, value) =
@@ -265,6 +265,12 @@ impl Formula {
                             value.round(&precision).map_err(|e| e.at_marker(item))?,
                         ));
                     }
+                    _ => error_at!(
+                        item,
+                        "unknown function '{}' with {} parameter(s)",
+                        name,
+                        count
+                    ),
                 },
             }
 
@@ -545,6 +551,18 @@ mod tests {
         assert!(matches!(error.error, NumericError(_)));
         assert_eq!(error.start, Offset(4));
         assert_eq!(error.end, Offset(9));
+
+        // wrong number of parameters
+        let error = Formula::new("1 + sqrt(0, 0)").unwrap().eval().unwrap_err();
+        assert!(matches!(error.error, EvaluationError(_)));
+        assert_eq!(error.start, Offset(4));
+        assert_eq!(error.end, Offset(8));
+
+        // unknown function
+        let error = Formula::new("1 + unknown(0)").unwrap().eval().unwrap_err();
+        assert!(matches!(error.error, EvaluationError(_)));
+        assert_eq!(error.start, Offset(4));
+        assert_eq!(error.end, Offset(11));
     }
 
     proptest! {

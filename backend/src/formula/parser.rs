@@ -1,11 +1,7 @@
 use std::fmt;
 use std::ops::Deref;
 
-use super::error::{
-    ErrorMarker,
-    FormulaError::{self, ParserError},
-    PositionedFormulaError,
-};
+use super::error::{ErrorMarker, FormulaError::ParserError, PositionedFormulaError};
 use super::lexer::{Bracket as LexerBracket, Operator as LexerOperator, PositionedToken, Token};
 use super::numeric::Numeric;
 
@@ -54,29 +50,11 @@ impl fmt::Display for Operator {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Function {
-    Sqrt,
-    Abs,
-    Round,
-}
-
-impl fmt::Display for Function {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let op = match self {
-            Self::Sqrt => "sqrt",
-            Self::Abs => "abs",
-            Self::Round => "round",
-        };
-        write!(f, "{}", op)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum ParseItem {
     Value(Value),
     Operator(Operator),
-    Function(Function, u32),
+    Function(String, usize),
 }
 
 impl fmt::Display for ParseItem {
@@ -136,50 +114,32 @@ pub struct Parser {
 
 type PeekableToken<'a> = std::iter::Peekable<std::slice::Iter<'a, PositionedToken>>;
 
-enum TermExpectation {
-    Unlimited,
-    Exact(u32, u32),
-}
-
 struct TermInformation {
-    start: usize,
-    expectation: TermExpectation,
+    _start: usize,
+    term_count: usize,
 }
 
 impl TermInformation {
-    fn unlimited_at(start: usize) -> Self {
+    fn new(start: usize) -> Self {
         Self {
-            start,
-            expectation: TermExpectation::Unlimited,
+            _start: start,
+            term_count: 0,
         }
     }
 
-    fn limited_at(start: usize, limit: u32) -> Self {
-        Self {
-            start,
-            expectation: TermExpectation::Exact(limit, 1),
-        }
+    fn new_term(&mut self) {
+        self.term_count += 1;
     }
 
-    fn countdown(&self) -> Self {
-        Self {
-            start: self.start,
-            expectation: match self.expectation {
-                TermExpectation::Unlimited | TermExpectation::Exact(_, 0) => {
-                    TermExpectation::Unlimited
-                }
-                TermExpectation::Exact(expected, countdown) => {
-                    TermExpectation::Exact(expected, countdown - 1)
-                }
-            },
-        }
+    fn terms(&self) -> usize {
+        self.term_count
     }
 }
 
 impl Parser {
     pub fn new(tokens: &[PositionedToken]) -> Result<Self, PositionedFormulaError> {
         let mut it = tokens.iter().peekable();
-        let parsed_expression = Self::expression(&mut it, 0, TermInformation::unlimited_at(0))?;
+        let parsed_expression = Self::expression(&mut it, 0, &mut TermInformation::new(0))?;
 
         if let Some(token) = it.next() {
             return Err(
@@ -193,7 +153,7 @@ impl Parser {
     fn expression(
         it: &mut PeekableToken,
         min_bp: u8,
-        info: TermInformation,
+        info: &mut TermInformation,
     ) -> Result<Vec<PositionedParseItem>, PositionedFormulaError> {
         let mut result = vec![];
 
@@ -209,16 +169,15 @@ impl Parser {
                     if let Some(Token::Bracket(LexerBracket::RoundOpen)) =
                         it.peek().map(|t| &t.token)
                     {
-                        let (function, params) =
-                            Self::function_item(name).map_err(|e| e.at_marker(token))?;
                         let bp = Self::function_binding_power();
 
-                        result.extend(Self::expression(
-                            it,
-                            bp,
-                            TermInformation::limited_at(token.start, params),
-                        )?);
-                        result.push(ParseItem::Function(function, params).at_token(token));
+                        let mut info = TermInformation::new(token.start);
+                        info.new_term();
+                        result.extend(Self::expression(it, bp, &mut info)?);
+                        result.push(
+                            ParseItem::Function(name.to_ascii_lowercase(), info.terms())
+                                .at_token(token),
+                        );
                     } else {
                         result
                             .push(ParseItem::Value(Value::Variable(name.clone())).at_token(token));
@@ -238,12 +197,12 @@ impl Parser {
                     result.extend(Self::expression(
                         it,
                         bp,
-                        TermInformation::unlimited_at(token.start),
+                        &mut TermInformation::new(token.start),
                     )?);
                     result.push(ParseItem::Operator(op).at_token(token));
                 }
                 Token::Bracket(LexerBracket::RoundOpen) => {
-                    result.extend(Self::expression(it, 0, info.countdown())?);
+                    result.extend(Self::expression(it, 0, info)?);
                     match it.next().map(|t| &t.token) {
                         Some(Token::Bracket(LexerBracket::RoundClose)) => (),
                         Some(x) => panic!("expected closing bracket, found: {}", x),
@@ -265,22 +224,12 @@ impl Parser {
             None => return Err(ParserError(format!("unexpected end of expression")).at_end()),
         };
 
-        let mut terms = 1;
         loop {
             match it.peek() {
                 Some(&token) => match &token.token {
-                    Token::Bracket(LexerBracket::RoundClose) => match info.expectation {
-                        TermExpectation::Exact(expected, 0) if terms != expected => {
-                            return Err(ParserError(format!(
-                                "expected {} parameter(s), found {}",
-                                expected, terms
-                            ))
-                            .between(info.start, token.start + token.length));
-                        }
-                        _ => break,
-                    },
+                    Token::Bracket(LexerBracket::RoundClose) => break,
                     Token::Operator(LexerOperator::Comma) => {
-                        terms += 1;
+                        info.new_term();
                         let (l_bp, r_bp) = Self::comma_binding_power();
                         if l_bp < min_bp {
                             break;
@@ -290,7 +239,7 @@ impl Parser {
                         result.extend(Self::expression(
                             it,
                             r_bp,
-                            TermInformation::unlimited_at(token.start),
+                            &mut TermInformation::new(token.start),
                         )?);
                     }
                     Token::Operator(op) => {
@@ -320,7 +269,7 @@ impl Parser {
                             result.extend(Self::expression(
                                 it,
                                 r_bp,
-                                TermInformation::unlimited_at(token.start),
+                                &mut TermInformation::new(token.start),
                             )?);
                         }
                         result.push(ParseItem::Operator(op).at(start, length));
@@ -369,20 +318,6 @@ impl Parser {
             Operator::Fac => Some(11),
             _ => None,
         }
-    }
-
-    fn function_item(name: &String) -> Result<(Function, u32), FormulaError> {
-        Ok(match name.to_lowercase().as_str() {
-            "sqrt" => (Function::Sqrt, 1),
-            "abs" => (Function::Abs, 1),
-            "round" => (Function::Round, 2),
-            _ => {
-                return Err(FormulaError::ParserError(format!(
-                    "unsupported function: {}",
-                    name
-                )))
-            }
-        })
     }
 }
 
@@ -688,21 +623,6 @@ pub(crate) mod tests {
         assert_eq!(error.start, Offset(1));
         assert_eq!(error.end, Offset(2));
 
-        // non-existent function
-        let error = Parser::new(
-            &vec![
-                Token::Operator(LexerOperator::Minus),
-                Token::Identifier("my_func".to_owned()),
-                Token::Bracket(LexerBracket::RoundOpen),
-                Token::Bracket(LexerBracket::RoundClose),
-            ]
-            .at_their_index(),
-        )
-        .unwrap_err();
-        assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Offset(1));
-        assert_eq!(error.end, Offset(2));
-
         // * is not an unary operator
         let error = Parser::new(
             &vec![
@@ -768,59 +688,6 @@ pub(crate) mod tests {
         assert!(matches!(error.error, ParserError(_)));
         assert_eq!(error.start, Offset(1));
         assert_eq!(error.end, Offset(2));
-
-        // too many parameters for sqrt
-        let error = Parser::new(
-            &vec![
-                Token::Operator(LexerOperator::Plus),
-                Token::Identifier("sqrt".to_owned()),
-                Token::Bracket(LexerBracket::RoundOpen),
-                Token::Number(1.0.into()),
-                Token::Operator(LexerOperator::Comma),
-                Token::Number(2.0.into()),
-                Token::Bracket(LexerBracket::RoundClose),
-            ]
-            .at_their_index(),
-        )
-        .unwrap_err();
-
-        assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Offset(1));
-        assert_eq!(error.end, Offset(7));
-
-        // too many parameters for round
-        let error = Parser::new(
-            &vec![
-                Token::Identifier("round".to_owned()),
-                Token::Bracket(LexerBracket::RoundOpen),
-                Token::Number(1.0.into()),
-                Token::Operator(LexerOperator::Comma),
-                Token::Number(2.0.into()),
-                Token::Operator(LexerOperator::Comma),
-                Token::Number(3.0.into()),
-                Token::Bracket(LexerBracket::RoundClose),
-            ]
-            .at_their_index(),
-        )
-        .unwrap_err();
-        assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Offset(0));
-        assert_eq!(error.end, Offset(8));
-
-        // too few parameters for round
-        let error = Parser::new(
-            &vec![
-                Token::Identifier("round".to_owned()),
-                Token::Bracket(LexerBracket::RoundOpen),
-                Token::Number(1.0.into()),
-                Token::Bracket(LexerBracket::RoundClose),
-            ]
-            .at_their_index(),
-        )
-        .unwrap_err();
-        assert!(matches!(error.error, ParserError(_)));
-        assert_eq!(error.start, Offset(0));
-        assert_eq!(error.end, Offset(4));
     }
 
     #[test]
@@ -1033,10 +900,14 @@ pub(crate) mod tests {
                 Token::Number(1.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere(),
+            .at_their_index(),
         )
         .unwrap();
-        assert_eq!(parser.postfix(), format!("1 sqrt"));
+        let expected = vec![
+            ParseItem::Value(Value::Number(1.0.into())).at(2, 1),
+            ParseItem::Function("sqrt".to_owned(), 1).at(0, 1),
+        ];
+        assert_eq!(&parser[..], &expected[..]);
 
         let parser = Parser::new(
             &vec![
@@ -1045,24 +916,34 @@ pub(crate) mod tests {
                 Token::Number(1.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere(),
+            .at_their_index(),
         )
         .unwrap();
-        assert_eq!(parser.postfix(), format!("1 abs"));
+        let expected = vec![
+            ParseItem::Value(Value::Number(1.0.into())).at(2, 1),
+            ParseItem::Function("abs".to_owned(), 1).at(0, 1),
+        ];
+        assert_eq!(&parser[..], &expected[..]);
 
         let parser = Parser::new(
             &vec![
-                Token::Identifier("sqrt".to_owned()),
+                Token::Identifier("SQRT".to_owned()),
                 Token::Bracket(LexerBracket::RoundOpen),
                 Token::Number(1.0.into()),
                 Token::Operator(LexerOperator::Plus),
                 Token::Number(2.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere(),
+            .at_their_index(),
         )
         .unwrap();
-        assert_eq!(parser.postfix(), format!("1 2 + sqrt"));
+        let expected = vec![
+            ParseItem::Value(Value::Number(1.0.into())).at(2, 1),
+            ParseItem::Value(Value::Number(2.0.into())).at(4, 1),
+            ParseItem::Operator(Operator::Add).at(3, 1),
+            ParseItem::Function("sqrt".to_owned(), 1).at(0, 1),
+        ];
+        assert_eq!(&parser[..], &expected[..]);
     }
 
     #[test]
@@ -1076,14 +957,19 @@ pub(crate) mod tests {
                 Token::Number(2.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere(),
+            .at_their_index(),
         )
         .unwrap();
-        assert_eq!(parser.postfix(), format!("1.5 2 round"));
+        let expected = vec![
+            ParseItem::Value(Value::Number(1.5.into())).at(2, 1),
+            ParseItem::Value(Value::Number(2.0.into())).at(4, 1),
+            ParseItem::Function("round".to_owned(), 2).at(0, 1),
+        ];
+        assert_eq!(&parser[..], &expected[..]);
 
         let parser = Parser::new(
             &vec![
-                Token::Identifier("round".to_owned()),
+                Token::Identifier("RoUnD".to_owned()),
                 Token::Bracket(LexerBracket::RoundOpen),
                 Token::Bracket(LexerBracket::RoundOpen),
                 Token::Number(1.5.into()),
@@ -1092,10 +978,15 @@ pub(crate) mod tests {
                 Token::Number(2.0.into()),
                 Token::Bracket(LexerBracket::RoundClose),
             ]
-            .anywhere(),
+            .at_their_index(),
         )
         .unwrap();
-        assert_eq!(parser.postfix(), format!("1.5 2 round"));
+        let expected = vec![
+            ParseItem::Value(Value::Number(1.5.into())).at(3, 1),
+            ParseItem::Value(Value::Number(2.0.into())).at(6, 1),
+            ParseItem::Function("round".to_owned(), 2).at(0, 1),
+        ];
+        assert_eq!(&parser[..], &expected[..]);
     }
 
     #[test]
