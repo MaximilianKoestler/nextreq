@@ -1,11 +1,22 @@
 import { createRouter, createWebHashHistory, RouteRecordRaw } from "vue-router";
+
 import TheCalculator from "@/views/TheCalculator.vue";
+import TheEditor from "@/views/TheEditor.vue";
 
 const routes: Array<RouteRecordRaw> = [
   {
     path: "/",
-    name: "TheCalculator",
+    redirect: "/calculator",
+  },
+  {
+    path: "/calculator",
+    name: "calculator",
     component: TheCalculator,
+  },
+  {
+    path: "/editor",
+    name: "editor",
+    component: TheEditor,
   },
 ];
 
