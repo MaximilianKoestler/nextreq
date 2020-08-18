@@ -5,7 +5,7 @@ use rocket_cors::{self, AllowedHeaders, AllowedOrigins};
 use std::error::Error;
 
 use nextreq::graphql_frontend::{create_schema, Context, Schema};
-use nextreq::interactors::CalculatorInteractor;
+use nextreq::interactors::{CalculatorInteractor, RequirementsInteractor};
 
 #[rocket::get("/")]
 fn graphiql() -> content::Html<String> {
@@ -45,7 +45,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
 
 fn create_context() -> Context {
     let calculator_interactor = Box::leak(Box::new(CalculatorInteractor::new()));
+    let requirements_interactor = Box::leak(Box::new(RequirementsInteractor::new()));
     Context {
         calculator_view: calculator_interactor,
+        requirements_view: requirements_interactor,
     }
 }
