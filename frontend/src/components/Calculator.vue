@@ -202,7 +202,6 @@ export default defineComponent({
 .editor {
   border: 1px solid black;
   border-radius: 4px;
-  font: inherit;
   padding: 0.5rem;
   width: 100%;
   height: 100px;

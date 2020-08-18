@@ -22,6 +22,6 @@ export default defineComponent({
 
 <style lang="scss">
 body {
-  font-family: Arial, Verdana, sans-serif;
+  font-family: "Roboto", Arial, Verdana, sans-serif !important;
 }
 </style>
