@@ -51,20 +51,26 @@ interface Result {
   error?: Error;
 }
 
-const addErrorStyle = (text: string, start: number, end: number) => {
-  const styledText =
-    text.slice(0, start) +
-    "<span class='inline-error'>" +
-    text.slice(start, end) +
-    "</span>" +
-    text.slice(end);
-  return styledText;
+const escapeText = (text: string) => {
+  const div = document.createElement("div");
+  div.appendChild(document.createTextNode(text));
+  return div.innerHTML;
 };
 
-const pureInput = (html: string) => {
+const htmlToPlain = (html: string) => {
   const div = document.createElement("div");
   div.innerHTML = html;
   return div.textContent || div.innerText || "";
+};
+
+const addErrorStyle = (text: string, start: number, end: number) => {
+  const styledText =
+    escapeText(text.slice(0, start)) +
+    "<span class='inline-error'>" +
+    escapeText(text.slice(start, end)) +
+    "</span>" +
+    escapeText(text.slice(end));
+  return styledText;
 };
 
 const updateDiv = (div: HTMLDivElement, html: string) => {
@@ -96,7 +102,7 @@ export default defineComponent({
 
     let timeout: NodeJS.Timeout | null = null;
     const onInputChange = (e: Event) => {
-      input.value = pureInput((e.target as HTMLDivElement).innerHTML);
+      input.value = htmlToPlain((e.target as HTMLDivElement).innerHTML);
 
       if (timeout !== null) {
         clearTimeout(timeout);
@@ -135,7 +141,7 @@ export default defineComponent({
         const styledInput = addErrorStyle(currentInput, start, end);
         updateDiv(editorDiv, styledInput);
       } else {
-        updateDiv(editorDiv, currentInput);
+        updateDiv(editorDiv, escapeText(currentInput));
       }
     });
 
