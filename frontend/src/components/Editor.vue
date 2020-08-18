@@ -20,6 +20,31 @@
 import { defineComponent, ref, computed } from "vue";
 
 import marked from "marked";
+import hljs from "highlight.js";
+
+import "@/assets/styles/github.css";
+
+marked.setOptions({
+  highlight: function (code, lang, callback) {
+    let highlighted = code;
+    try {
+      if (hljs.getLanguage(lang) !== undefined) {
+        highlighted = hljs.highlight(lang, code).value;
+      } else if (lang === "") {
+        highlighted = hljs.highlightAuto(code).value;
+      }
+    } catch (e) {
+      console.error(e);
+      return code;
+    }
+
+    if (callback !== undefined) {
+      callback(null, highlighted);
+    } else {
+      return highlighted;
+    }
+  },
+});
 
 export default defineComponent({
   name: "Editor",
@@ -28,7 +53,6 @@ export default defineComponent({
 
     const onMarkdownChange = (e: Event) => {
       markdownInput.value = (e.target as HTMLDivElement).innerText;
-      console.log(markdownInput.value);
     };
 
     const preview = computed(() => {

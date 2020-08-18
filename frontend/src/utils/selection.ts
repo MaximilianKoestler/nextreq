@@ -111,8 +111,6 @@ export const setSelectedPosition = (
     return;
   }
 
-  console.log(anchorNode, anchorOffset, focusNode, focusOffset);
-
   document
     .getSelection()
     ?.setBaseAndExtent(anchorNode, anchorOffset, focusNode, focusOffset);
