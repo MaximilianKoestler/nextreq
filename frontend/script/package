@@ -1,5 +1,5 @@
 #!/bin/bash
 
-command="npm run format"
+command="npm run build"
 echo $command
 $command

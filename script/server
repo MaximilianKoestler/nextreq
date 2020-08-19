@@ -1,0 +1,5 @@
+#!/bin/bash
+
+pushd backend > /dev/null
+bash ./script/server
+popd > /dev/null

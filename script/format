@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 
 pushd frontend > /dev/null
 bash ./script/format
