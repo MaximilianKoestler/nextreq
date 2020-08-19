@@ -18,6 +18,8 @@ COMMIT=$(git rev-parse --short HEAD)
 TAG="${BRANCH}-${COMMIT}"
 IMAGE=nextreq
 
+echo "Creating image ${IMAGE}:${TAG}"
+
 docker build -t ${IMAGE}:${TAG} -f distribution/single_image/Dockerfile .
 docker tag ${IMAGE}:${TAG} ${IMAGE}:${BRANCH}-latest
 
