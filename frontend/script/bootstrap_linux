@@ -1,8 +1,0 @@
-#!/bin/bash
-
-if [[ ! "$OSTYPE" == "linux-gnu"* ]]; then
-    echo "This script is only supported on Linux" >&2
-    exit 1
-fi
-
-# TODO

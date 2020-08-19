@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# pushd frontend > /dev/null
-# bash ./script/bootstrap
-# popd > /dev/null
+pushd frontend > /dev/null
+bash ./script/bootstrap
+popd > /dev/null
 
 if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     pushd backend > /dev/null

@@ -12,3 +12,11 @@ popd > /dev/null
 pushd backend > /dev/null
 bash ./script/package_linux
 popd > /dev/null
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+COMMIT=$(git rev-parse --short HEAD)
+TAG="${BRANCH}-${COMMIT}"
+IMAGE=nextreq
+
+docker build -t ${IMAGE}:${TAG} -f distribution/single_image/Dockerfile .
+docker tag ${IMAGE}:${TAG} ${IMAGE}:latest
