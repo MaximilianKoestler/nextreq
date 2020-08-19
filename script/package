@@ -15,14 +15,9 @@ popd > /dev/null
 
 BRANCH=$(git rev-parse --abbrev-ref HEAD | sed "s/[\/-]/_/g")
 COMMIT=$(git rev-parse --short HEAD)
-TAG="${BRANCH}-${COMMIT}"
 IMAGE=nextreq
+TAG=${BRANCH}-${COMMIT}
 
 echo "Creating image ${IMAGE}:${TAG}"
 
 docker build -t ${IMAGE}:${TAG} -f distribution/single_image/Dockerfile .
-docker tag ${IMAGE}:${TAG} ${IMAGE}:${BRANCH}-latest
-
-if [[ ! "$BRANCH" == "master" ]]; then
-    docker tag ${IMAGE}:${TAG} ${IMAGE}:latest
-fi
