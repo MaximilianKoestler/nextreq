@@ -7,6 +7,7 @@ export RUSTDOCFLAGS="-Cpanic=abort"
 # cargo +nightly-gnu clean --target-dir target-nightly
 cargo +nightly-gnu build --target-dir target-nightly
 cargo +nightly-gnu test --target-dir target-nightly
+cargo +nightly-gnu test --target-dir target-nightly -- --ignored
 
 mkdir -p ./generated
 rm -rf ./generated/coverage
