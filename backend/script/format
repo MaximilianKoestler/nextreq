@@ -1,0 +1,5 @@
+#!/bin/sh
+
+command="cargo fmt"
+echo $command
+$command

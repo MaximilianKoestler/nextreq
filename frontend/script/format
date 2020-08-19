@@ -1,0 +1,5 @@
+#!/bin/sh
+
+command="npm run format"
+echo $command
+$command

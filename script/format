@@ -1,0 +1,9 @@
+#!/bin/sh
+
+pushd frontend > /dev/null
+sh ./script/format
+popd > /dev/null
+
+pushd backend > /dev/null
+sh ./script/format
+popd > /dev/null

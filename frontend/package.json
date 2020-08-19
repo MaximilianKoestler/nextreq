@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "serve": "vue-cli-service serve",
     "build": "vue-cli-service build",
-    "test:unit": "vue-cli-service test:unit",
+    "format": "prettier ./src ./tests --write --end-of-line auto --loglevel warn",
+    "lint": "vue-cli-service lint",
+    "serve": "vue-cli-service serve",
     "test:debug": "node ./node_modules/@vue/cli-service/bin/vue-cli-service.js test:unit --no-cache --runInBand",
-    "lint": "vue-cli-service lint"
+    "test:unit": "vue-cli-service test:unit"
   },
   "dependencies": {
     "apollo-cache-inmemory": "^1.6.6",
@@ -20,6 +21,7 @@
     "graphql-tag": "^2.11.0",
     "highlight.js": "^10.1.2",
     "marked": "^1.1.1",
+    "prettier": "^2.0.5",
     "vue": "^3.0.0-0",
     "vue-router": "^4.0.0-0",
     "vuex": "^4.0.0-0"
