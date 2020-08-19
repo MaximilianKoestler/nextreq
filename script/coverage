@@ -1,0 +1,9 @@
+#!/bin/sh
+
+# pushd frontend > /dev/null
+# sh ./script/coverage
+# popd > /dev/null
+
+pushd backend > /dev/null
+sh ./script/coverage
+popd > /dev/null
