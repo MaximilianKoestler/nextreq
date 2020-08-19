@@ -13,7 +13,7 @@ pushd backend > /dev/null
 bash ./script/package_linux
 popd > /dev/null
 
-BRANCH=$(git rev-parse --abbrev-ref HEAD)
+BRANCH=$(git rev-parse --abbrev-ref HEAD | sed "s/[\/-]/_/g")
 COMMIT=$(git rev-parse --short HEAD)
 TAG="${BRANCH}-${COMMIT}"
 IMAGE=nextreq
