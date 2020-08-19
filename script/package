@@ -19,4 +19,8 @@ TAG="${BRANCH}-${COMMIT}"
 IMAGE=nextreq
 
 docker build -t ${IMAGE}:${TAG} -f distribution/single_image/Dockerfile .
-docker tag ${IMAGE}:${TAG} ${IMAGE}:latest
+docker tag ${IMAGE}:${TAG} ${IMAGE}:${BRANCH}-latest
+
+if [[ ! "$BRANCH" == "master" ]]; then
+    docker tag ${IMAGE}:${TAG} ${IMAGE}:latest
+fi
