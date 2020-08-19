@@ -1,20 +1,22 @@
 <template>
-  <div
-    ref="editorInput"
-    class="editor"
-    contenteditable="true"
-    spellcheck="false"
-    @input="onInputChange($event)"
-  ></div>
+  <div>
+    <div
+      ref="editorInput"
+      class="editor"
+      contenteditable="true"
+      spellcheck="false"
+      @input="onInputChange($event)"
+    ></div>
 
-  <div class="result">
-    <span v-if="computedResult.value !== undefined">{{
-      computedResult.value
-    }}</span>
-    <span v-else-if="computedResult.error !== undefined" class="error">{{
-      computedResult.error.message
-    }}</span>
-    <span v-else>...</span>
+    <div class="result">
+      <span v-if="computedResult.value !== undefined">{{
+        computedResult.value
+      }}</span>
+      <span v-else-if="computedResult.error !== undefined" class="error">{{
+        computedResult.error.message
+      }}</span>
+      <span v-else>...</span>
+    </div>
   </div>
 </template>
 
@@ -41,8 +43,8 @@ const apolloClient = new ApolloClient({
 
 interface Error {
   message: string;
-  start: number;
-  end: number;
+  start?: number;
+  end?: number;
 }
 
 interface Result {
@@ -128,18 +130,20 @@ export default defineComponent({
         const error = newResult.error;
         const oldInput = newResult.input;
 
-        let start = error.start;
-        if (start == -1) {
-          start = oldInput.length - 1;
-        }
+        if (error.start !== undefined && error.end !== undefined) {
+          let start = error.start;
+          if (start == -1) {
+            start = oldInput.length - 1;
+          }
 
-        let end = error.end;
-        if (end == -1) {
-          end = oldInput.length;
-        }
+          let end = error.end;
+          if (end == -1) {
+            end = oldInput.length;
+          }
 
-        const styledInput = addErrorStyle(currentInput, start, end);
-        updateDiv(editorDiv, styledInput);
+          const styledInput = addErrorStyle(currentInput, start, end);
+          updateDiv(editorDiv, styledInput);
+        }
       } else {
         updateDiv(editorDiv, escapeText(currentInput));
       }
@@ -177,10 +181,13 @@ export default defineComponent({
           } else if (error.networkError !== undefined) {
             computedResult.value = {
               input: newInput,
-              error: error.networkError,
+              error: { message: "" + error.networkError },
             };
           } else {
-            computedResult.value = { input: newInput, error };
+            computedResult.value = {
+              input: newInput,
+              error: { message: "" + error },
+            };
           }
         });
     });
