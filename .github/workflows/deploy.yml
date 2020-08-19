@@ -15,4 +15,6 @@ jobs:
       - name: Package
         run: bash ./script/package
       - name: List
-        run: docker image ls
+        run: docker image ls | grep nextreq
+      - name: Deploy
+        run: bash ./script/deploy
