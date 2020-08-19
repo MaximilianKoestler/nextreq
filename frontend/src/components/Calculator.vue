@@ -31,7 +31,7 @@ import { InMemoryCache } from "apollo-cache-inmemory";
 import { getSelectionPosition, setSelectedPosition } from "@/utils/selection";
 
 const httpLink = createHttpLink({
-  uri: "http://localhost:8100/graphql",
+  uri: process.env.VUE_APP_API_ROOT_URL,
 });
 
 const cache = new InMemoryCache();
