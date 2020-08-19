@@ -1,9 +1,14 @@
-#!/bin/sh
+#!/bin/bash
 
 # pushd frontend > /dev/null
-# sh ./script/coverage
+# bash ./script/coverage
 # popd > /dev/null
 
-pushd backend > /dev/null
-sh ./script/coverage
-popd > /dev/null
+if [[ "$OSTYPE" == "linux-gnu"* ]]; then
+    pushd backend > /dev/null
+    bash ./script/coverage_linux
+    popd > /dev/null
+else
+    echo "Backend coverage is only supported on Linux" >&2
+fi
+

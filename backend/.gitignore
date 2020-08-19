@@ -12,3 +12,6 @@ proptest-regressions/
 
 # Generated reports
 generated/
+
+# Binaries for packaging
+dist/

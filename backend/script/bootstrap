@@ -1,4 +1,0 @@
-#!/bin/sh
-
-rustup install nightly-gnu
-cargo +nightly-gnu install grcov
