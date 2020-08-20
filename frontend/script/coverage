@@ -1,0 +1,11 @@
+#!/bin/bash
+
+command="npm run test:coverage"
+echo $command
+$command
+
+return_code=$?
+if [[ $return_code -ne 0 ]]; then
+    echo "test failed, propagating return code"
+    exit 1
+fi
