@@ -171,7 +171,7 @@ impl Parser {
                     {
                         let bp = Self::function_binding_power();
 
-                        let mut info = TermInformation::new(token.start);
+                        let mut new_info = TermInformation::new(token.start);
 
                         // handle special case of function without any parameter
                         let mut lookahead = it.clone();
@@ -182,11 +182,11 @@ impl Parser {
                             it.next();
                             it.next();
                         } else {
-                            info.new_term();
-                            result.extend(Self::expression(it, bp, &mut info)?);
+                            new_info.new_term();
+                            result.extend(Self::expression(it, bp, &mut new_info)?);
                         }
                         result.push(
-                            ParseItem::Function(name.to_ascii_lowercase(), info.terms())
+                            ParseItem::Function(name.to_ascii_lowercase(), new_info.terms())
                                 .at_token(token),
                         );
                     } else {
