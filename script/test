@@ -1,0 +1,16 @@
+#!/bin/bash
+
+pushd frontend > /dev/null
+bash ./script/test
+return_code_frontend=$?
+popd > /dev/null
+
+pushd backend > /dev/null
+bash ./script/test
+return_code_backend=$?
+popd > /dev/null
+
+if [[ $return_code_frontend -ne 0 ]] || [[ $return_code_backend -ne 0 ]]; then
+    echo "test failed, propagating return code"
+    exit 1
+fi
