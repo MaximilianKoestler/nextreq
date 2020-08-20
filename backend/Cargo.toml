@@ -22,6 +22,7 @@ juniper_rocket_async = { git = "https://github.com/graphql-rust/juniper" }
 [dev-dependencies]
 criterion = "*"
 itertools = "*"
+pretty_assertions = "0.6.1"
 proptest = "*"
 rand = "*"
 

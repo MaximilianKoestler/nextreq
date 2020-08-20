@@ -240,12 +240,12 @@ impl Parser {
                 Some(&token) => match &token.token {
                     Token::Bracket(LexerBracket::RoundClose) => break,
                     Token::Operator(LexerOperator::Comma) => {
-                        info.new_term();
                         let (l_bp, r_bp) = Self::comma_binding_power();
                         if l_bp < min_bp {
                             break;
                         }
 
+                        info.new_term();
                         it.next();
                         result.extend(Self::expression(
                             it,
@@ -346,6 +346,7 @@ pub(crate) mod tests {
     use super::super::quoted_string::Quotable;
     use super::*;
     use itertools::Itertools;
+    use pretty_assertions::assert_eq;
     use proptest::prelude::*;
     use std::iter::{once, repeat};
 
@@ -1015,6 +1016,78 @@ pub(crate) mod tests {
             ParseItem::Value(Value::Number(1.5.into())).at(3, 1),
             ParseItem::Value(Value::Number(2.0.into())).at(6, 1),
             ParseItem::Function("round".to_owned(), 2).at(0, 1),
+        ];
+        assert_eq!(&parser[..], &expected[..]);
+    }
+
+    #[test]
+    fn parse_nested_function() {
+        // a(b(1))
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("a".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Identifier("b".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap();
+        let expected = vec![
+            ParseItem::Value(Value::Number(1.0.into())).at(4, 1),
+            ParseItem::Function("b".to_owned(), 1).at(2, 1),
+            ParseItem::Function("a".to_owned(), 1).at(0, 1),
+        ];
+        assert_eq!(&parser[..], &expected[..]);
+
+        // a(b(1), 2)
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("a".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Identifier("b".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(2.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap();
+        let expected = vec![
+            ParseItem::Value(Value::Number(1.0.into())).at(4, 1),
+            ParseItem::Function("b".to_owned(), 1).at(2, 1),
+            ParseItem::Value(Value::Number(2.0.into())).at(7, 1),
+            ParseItem::Function("a".to_owned(), 2).at(0, 1),
+        ];
+        assert_eq!(&parser[..], &expected[..]);
+
+        // a(b(1, 2))
+        let parser = Parser::new(
+            &vec![
+                Token::Identifier("a".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Identifier("b".to_owned()),
+                Token::Bracket(LexerBracket::RoundOpen),
+                Token::Number(1.0.into()),
+                Token::Operator(LexerOperator::Comma),
+                Token::Number(2.0.into()),
+                Token::Bracket(LexerBracket::RoundClose),
+                Token::Bracket(LexerBracket::RoundClose),
+            ]
+            .at_their_index(),
+        )
+        .unwrap();
+        let expected = vec![
+            ParseItem::Value(Value::Number(1.0.into())).at(4, 1),
+            ParseItem::Value(Value::Number(2.0.into())).at(6, 1),
+            ParseItem::Function("b".to_owned(), 2).at(2, 1),
+            ParseItem::Function("a".to_owned(), 1).at(0, 1),
         ];
         assert_eq!(&parser[..], &expected[..]);
     }
