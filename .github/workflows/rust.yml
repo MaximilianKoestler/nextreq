@@ -2,7 +2,7 @@ name: Rust build and test
 
 on:
   push:
-    branches: '**'
+    branches: "**"
   pull_request:
     branches: [master]
 
@@ -18,10 +18,19 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
+      - uses: technote-space/get-diff-action@v3
+        id: backend_diff
+        with:
+          PREFIX_FILTER: backend/
 
       - name: Build
         run: cargo build
+        if: steps.backend_diff.outputs.diff
+
       - name: Run tests
         run: cargo test
+        if: steps.backend_diff.outputs.diff
+
       - name: Check format
         run: cargo fmt --all -- --check
+        if: steps.backend_diff.outputs.diff
