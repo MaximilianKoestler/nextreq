@@ -1,0 +1,24 @@
+---
+
+- hosts: localhost
+  gather_facts: False
+  vars:
+    instance_tag: staging
+  roles:
+    - role: start_ec2_servers
+
+- hosts: staging
+  remote_user: ec2-user
+  roles:
+    - role: prerequisites
+      become: true
+    - role: docker
+      become: true
+    - role: ecr_credentials
+      become: true
+    - role: hot_reload_service
+      vars:
+        container_name: nextreq
+        container_image: 399279535412.dkr.ecr.eu-central-1.amazonaws.com/nextreq:latest
+        container_ports:
+          - "80:8000"

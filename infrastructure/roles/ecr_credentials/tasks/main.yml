@@ -1,0 +1,20 @@
+---
+
+- name: Install the latest version of amazon-ecr-credential-helper
+  yum:
+    name: amazon-ecr-credential-helper
+    state: latest
+
+- name: Create directory for Docker configuration
+  become: false
+  file:
+    path: ~/.docker
+    mode: '0700'
+    state: directory
+
+- name: Install credentials in Docker configuration
+  become: false
+  copy:
+    src: '{{ role_path }}/files/docker_config.json'
+    dest: ~/.docker/config.json
+    mode: '0600'

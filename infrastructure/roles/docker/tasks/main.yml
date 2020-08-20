@@ -1,0 +1,34 @@
+---
+
+- name: Check if Docker is installed
+  yum:
+    list=docker
+  register: yum_list
+
+- name: Enable amazon-linux-extras packages
+  shell: 'amazon-linux-extras enable docker'
+  when: yum_list.results | selectattr('yumstate', 'match', 'installed') | list | length == 0
+
+- name: Install the latest version of Docker
+  yum:
+    name: docker
+    state: latest
+
+- name: Install Docker Python module
+  pip:
+    name:
+      - docker
+
+- name: Enable Docker service at startup
+  service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Add ansible user to docker group
+  user:
+    name: '{{ ansible_user }}'
+    append: true
+    groups: docker
+
+- meta: reset_connection # reload groups

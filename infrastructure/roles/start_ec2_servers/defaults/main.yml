@@ -1,0 +1,8 @@
+---
+
+instance_count: 1
+instance_group: web-service
+instance_key: AWS Master
+instance_iam_role: ecr-readonly 
+instance_region: eu-central-1
+instance_type: t2.micro
