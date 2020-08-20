@@ -1,6 +1,7 @@
 <template>
   <div>
     <div class="container">
+      <h1>Start typing markdown</h1>
       <div class="row">
         <div class="col-12"><Editor /></div>
       </div>
