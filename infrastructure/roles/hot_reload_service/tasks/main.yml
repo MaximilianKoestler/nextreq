@@ -6,3 +6,34 @@
     image: '{{ container_image }}'
     published_ports: '{{ container_ports }}'
     restart_policy: unless-stopped
+
+- name: Create directory for watchtower-helper
+  file:
+    path: '/home/{{ ansible_user }}/watchtower_ecr'
+    mode: '0770'
+    state: directory
+
+- name: Copy Dockerfile for the watchtower-helper
+  copy:
+    src: '{{ role_path }}/files/watchtower_ecr/Dockerfile'
+    dest: '/home/{{ ansible_user }}/watchtower_ecr/Dockerfile'
+    mode: '0660'
+
+- name: Build watchtower image
+  docker_image:
+    build:
+      path: '/home/{{ ansible_user }}/watchtower_ecr/'
+      pull: true
+    name: watchtower-ecr
+    tag: latest
+    source: build
+
+- name: 'Start watchtower'
+  docker_container:
+    name: 'watchtower'
+    image: 'watchtower-ecr'
+    restart_policy: unless-stopped
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock'
+      - '/home/{{ ansible_user }}/.docker/config.json:/config.json'
+    command: '{{ container_name }}'
