@@ -1,19 +1,21 @@
 <template>
-  <div
-    ref="markdownInput"
-    class="editor markdown"
-    contenteditable="true"
-    spellcheck="true"
-    @input="onMarkdownChange($event)"
-  ></div>
+  <div>
+    <div
+      ref="markdownInput"
+      class="editor markdown"
+      contenteditable="true"
+      spellcheck="true"
+      @input="onMarkdownChange($event)"
+    ></div>
 
-  <div
-    ref="editorPreview"
-    class="editor preview"
-    contenteditable="false"
-    spellcheck="true"
-    v-html="preview"
-  ></div>
+    <div
+      ref="editorPreview"
+      class="editor preview"
+      contenteditable="false"
+      spellcheck="true"
+      v-html="preview"
+    ></div>
+  </div>
 </template>
 
 <script lang="ts">
